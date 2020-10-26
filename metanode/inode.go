@@ -533,3 +533,11 @@ func (i *Inode) DoReadFunc(fn func()) {
 	fn()
 	i.RUnlock()
 }
+
+// SetMtime sets mtime to the current time.
+func (i *Inode) SetMtime() {
+	mtime := Now.GetCurrentTime().Unix()
+	i.Lock()
+	i.ModifyTime = mtime
+	i.Unlock()
+}
