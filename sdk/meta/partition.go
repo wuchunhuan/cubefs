@@ -88,7 +88,7 @@ func (mw *MetaWrapper) getPartitionByInode(ino uint64) *MetaPartition {
 		if ino > mp.End || ino < mp.Start {
 			mp = nil
 		}
-		// Iterate one item is enough
+		// Iterate one item is enough。
 		return false
 	})
 
