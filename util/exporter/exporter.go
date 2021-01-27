@@ -29,14 +29,15 @@ import (
 )
 
 const (
-	PromHandlerPattern      = "/metrics"       // prometheus handler
-	MetricPromHandlerPattern      = "/metrics/prometheus"       // metric prometheus handler
-	AppName                 = "cfs"            //app name
-	ConfigKeyExporterEnable = "exporterEnable" //exporter enable
-	ConfigKeyExporterPort   = "exporterPort"   //exporter port
-	ConfigKeyConsulAddr     = "consulAddr"     //consul addr
-	ConfigKeyConsulMeta 	= "consulMeta" 		// consul meta
-	ChSize                  = 1024 * 10        //collect chan size
+	PromHandlerPattern       = "/metrics"            // prometheus handler
+	MetricPromHandlerPattern = "/metrics/prometheus" // metric prometheus handler
+	AppName                  = "cfs"                 //app name
+	ConfigKeyExporterEnable  = "exporterEnable"      //exporter enable
+	ConfigKeyExporterPort    = "exporterPort"        //exporter port
+	ConfigKeyConsulAddr      = "consulAddr"          //consul addr
+	ConfigKeyConsulMeta      = "consulMeta"          // consul meta
+	ConfigKeyIpFilter        = "ipFilter"            // add ip filter
+	ChSize                   = 1024 * 10             //collect chan size
 )
 
 var (
@@ -128,6 +129,13 @@ func RegistConsul(cluster string, role string, cfg *config.Config) {
 	consulAddr := cfg.GetString(ConfigKeyConsulAddr)
 	consulMeta := cfg.GetString(ConfigKeyConsulMeta)
 
+	ipFilter := cfg.GetString(ConfigKeyIpFilter)
+	host, err := GetLocalIpAddr(ipFilter)
+	if err != nil {
+		log.LogErrorf("get local ip error, %v", err.Error())
+		return
+	}
+
 	if exporterPort == int64(0) {
 		exporterPort = cfg.GetInt64(ConfigKeyExporterPort)
 	}
@@ -135,7 +143,7 @@ func RegistConsul(cluster string, role string, cfg *config.Config) {
 		if ok := strings.HasPrefix(consulAddr, "http"); !ok {
 			consulAddr = "http://" + consulAddr
 		}
-		go DoConsulRegisterProc(consulAddr, AppName, role, cluster, consulMeta, exporterPort)
+		go DoConsulRegisterProc(consulAddr, AppName, role, cluster, consulMeta, host, exporterPort)
 	}
 }
 
