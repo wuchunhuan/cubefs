@@ -29,15 +29,14 @@ import (
 )
 
 const (
-	PromHandlerPattern       = "/metrics"            // prometheus handler
-	MetricPromHandlerPattern = "/metrics/prometheus" // metric prometheus handler
-	AppName                  = "cfs"                 //app name
-	ConfigKeyExporterEnable  = "exporterEnable"      //exporter enable
-	ConfigKeyExporterPort    = "exporterPort"        //exporter port
-	ConfigKeyConsulAddr      = "consulAddr"          //consul addr
-	ConfigKeyConsulMeta      = "consulMeta"          // consul meta
-	ConfigKeyIpFilter        = "ipFilter"            // add ip filter
-	ChSize                   = 1024 * 10             //collect chan size
+	PromHandlerPattern      = "/metrics"       // prometheus handler
+	AppName                 = "cfs"            //app name
+	ConfigKeyExporterEnable = "exporterEnable" //exporter enable
+	ConfigKeyExporterPort   = "exporterPort"   //exporter port
+	ConfigKeyConsulAddr     = "consulAddr"     //consul addr
+	ConfigKeyConsulMeta     = "consulMeta"     // consul meta
+	ConfigKeyIpFilter       = "ipFilter"       // add ip filter
+	ChSize                  = 1024 * 10        //collect chan size
 )
 
 var (
@@ -71,10 +70,6 @@ func Init(role string, cfg *config.Config) {
 		Timeout: 5 * time.Second,
 	}))
 
-	http.Handle(MetricPromHandlerPattern, promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
-		Timeout: 5 * time.Second,
-	}))
-
 	namespace = AppName + "_" + role
 	addr := fmt.Sprintf(":%d", port)
 	go func() {
@@ -104,12 +99,6 @@ func InitWithRouter(role string, cfg *config.Config, router *mux.Router, exPort 
 	router.NewRoute().Name("metrics").
 		Methods(http.MethodGet).
 		Path(PromHandlerPattern).
-		Handler(promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
-			Timeout: 5 * time.Second,
-		}))
-	router.NewRoute().Name("metrics_prom").
-		Methods(http.MethodGet).
-		Path(MetricPromHandlerPattern).
 		Handler(promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
 			Timeout: 5 * time.Second,
 		}))
