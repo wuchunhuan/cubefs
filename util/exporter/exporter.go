@@ -29,15 +29,22 @@ import (
 )
 
 const (
-	PromHandlerPattern       = "/metrics"            // prometheus handler
-	MetricPromHandlerPattern = "/metrics/prometheus" // metric prometheus handler
-	AppName                  = "cfs"                 //app name
-	ConfigKeyExporterEnable  = "exporterEnable"      //exporter enable
-	ConfigKeyExporterPort    = "exporterPort"        //exporter port
-	ConfigKeyConsulAddr      = "consulAddr"          //consul addr
-	ConfigKeyConsulMeta      = "consulMeta"          // consul meta
-	ConfigKeyIpFilter        = "ipFilter"            // add ip filter
-	ChSize                   = 1024 * 10             //collect chan size
+	PromHandlerPattern      = "/metrics"       // prometheus handler
+	AppName                 = "cfs"            //app name
+	ConfigKeyExporterEnable = "exporterEnable" //exporter enable
+	ConfigKeyExporterPort   = "exporterPort"   //exporter port
+	ConfigKeyConsulAddr     = "consulAddr"     //consul addr
+	ConfigKeyConsulMeta     = "consulMeta"     // consul meta
+	ConfigKeyIpFilter       = "ipFilter"       // add ip filter
+	ConfigKeyEnablePid      = "enablePid"      // enable report partition id
+	ChSize                  = 1024 * 10        //collect chan size
+
+	// monitor label name
+	Vol    = "vol"
+	Disk   = "disk"
+	PartId = "partid"
+	Op     = "op"
+	Type   = "type"
 )
 
 var (
@@ -46,6 +53,7 @@ var (
 	modulename        string
 	exporterPort      int64
 	enabledPrometheus = false
+	EnablePid         = true
 	replacer          = strings.NewReplacer("-", "_", ".", "_", " ", "_", ",", "_", ":", "_")
 )
 
@@ -60,6 +68,10 @@ func Init(role string, cfg *config.Config) {
 		log.LogInfof("%v exporter disabled", role)
 		return
 	}
+
+	EnablePid = cfg.GetBoolWithDefault(ConfigKeyEnablePid, true)
+	log.LogInfo("enable report partition id info? ", EnablePid)
+
 	port := cfg.GetInt64(ConfigKeyExporterPort)
 	if port == 0 {
 		log.LogInfof("%v exporter port not set", port)
@@ -68,10 +80,6 @@ func Init(role string, cfg *config.Config) {
 	exporterPort = port
 	enabledPrometheus = true
 	http.Handle(PromHandlerPattern, promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
-		Timeout: 5 * time.Second,
-	}))
-
-	http.Handle(MetricPromHandlerPattern, promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
 		Timeout: 5 * time.Second,
 	}))
 
@@ -104,12 +112,6 @@ func InitWithRouter(role string, cfg *config.Config, router *mux.Router, exPort 
 	router.NewRoute().Name("metrics").
 		Methods(http.MethodGet).
 		Path(PromHandlerPattern).
-		Handler(promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
-			Timeout: 5 * time.Second,
-		}))
-	router.NewRoute().Name("metrics_prom").
-		Methods(http.MethodGet).
-		Path(MetricPromHandlerPattern).
 		Handler(promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
 			Timeout: 5 * time.Second,
 		}))
@@ -153,6 +155,6 @@ func collect() {
 	}
 	go collectCounter()
 	go collectGauge()
-	go collectTP()
+	go collectHistogram()
 	go collectAlarm()
 }
