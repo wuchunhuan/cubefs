@@ -177,6 +177,7 @@ func (s *raftStore) CreatePartition(cfg *PartitionConfig) (p Partition, err erro
 		Storage:      ws,
 		StateMachine: cfg.SM,
 		Applied:      cfg.Applied,
+		Monitor:      newMonitor(),
 	}
 	if err = s.raftServer.CreateRaft(rc); err != nil {
 		return
