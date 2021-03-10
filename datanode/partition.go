@@ -93,6 +93,7 @@ type DataPartition struct {
 	replicas        []string // addresses of the replicas
 	replicasLock    sync.RWMutex
 	disk            *Disk
+	dataNode        *DataNode
 	isLeader        bool
 	isRaftLeader    bool
 	path            string
@@ -234,6 +235,7 @@ func newDataPartition(dpCfg *dataPartitionCfg, disk *Disk) (dp *DataPartition, e
 		clusterID:       dpCfg.ClusterID,
 		partitionID:     partitionID,
 		disk:            disk,
+		dataNode:        disk.dataNode,
 		path:            dataPath,
 		partitionSize:   dpCfg.PartitionSize,
 		replicas:        make([]string, 0),
@@ -840,5 +842,14 @@ func (dp *DataPartition) canRemoveSelf() (canRemove bool, err error) {
 		canRemove = true
 		return
 	}
+	return
+}
+
+func (dp *DataPartition) getRepairConn(target string) (net.Conn, error) {
+	return dp.dataNode.getRepairConn(target)
+}
+
+func (dp *DataPartition) putRepairConn(conn net.Conn, forceClose bool) {
+	dp.dataNode.putRepairConn(conn, forceClose)
 	return
 }
