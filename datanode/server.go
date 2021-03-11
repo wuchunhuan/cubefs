@@ -199,7 +199,7 @@ func doShutdown(server common.Server) {
 		return
 	}
 	close(s.stopC)
-
+	s.space.Stop()
 	s.stopUpdateNodeInfo()
 	s.stopTCPService()
 	s.stopRaftServer()
