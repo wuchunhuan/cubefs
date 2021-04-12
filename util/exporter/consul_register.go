@@ -55,8 +55,7 @@ func GetConsulId(app string, role string, host string, port int64) string {
 // do consul register process
 func DoConsulRegisterProc(addr, app, role, cluster, meta, host string, port int64) {
 	if len(addr) <= 0 {
-		log.LogInfo("consul addr is empty, use default, consul.ums.oppo.local ")
-		addr = "consul.ums.oppo.local"
+
 		return
 	}
 	log.LogInfof("metrics consul register %v %v %v", addr, cluster, port)
