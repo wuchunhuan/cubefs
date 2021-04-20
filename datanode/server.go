@@ -75,6 +75,7 @@ const (
 	ConfigKeyRaftDir       = "raftDir"       // string
 	ConfigKeyRaftHeartbeat = "raftHeartbeat" // string
 	ConfigKeyRaftReplica   = "raftReplica"   // string
+	CfgTickInterval        = "tickInterval"  // int
 	// smux Config
 	ConfigKeyEnableSmuxClient  = "enableSmuxConnPool" //bool
 	ConfigKeySmuxPortShift     = "smuxPortShift"      //int
@@ -96,6 +97,7 @@ type DataNode struct {
 	raftHeartbeat   string
 	raftReplica     string
 	raftStore       raftstore.RaftStore
+	tickInterval    int
 
 	tcpListener net.Listener
 	stopC       chan bool
