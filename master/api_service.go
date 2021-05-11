@@ -708,11 +708,16 @@ func (m *Server) createVol(w http.ResponseWriter, r *http.Request) {
 		followerRead bool
 		authenticate bool
 		crossZone    bool
+		defaultPriority bool
 		zoneName     string
 		description  string
 	)
 
-	if name, owner, zoneName, description, mpCount, dpReplicaNum, size, capacity, followerRead, authenticate, crossZone, err = parseRequestToCreateVol(r); err != nil {
+	if name, owner, zoneName, description,
+				mpCount, dpReplicaNum, size,
+				capacity, followerRead,
+				authenticate, crossZone, defaultPriority,
+				err = parseRequestToCreateVol(r); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
@@ -721,7 +726,10 @@ func (m *Server) createVol(w http.ResponseWriter, r *http.Request) {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if vol, err = m.cluster.createVol(name, owner, zoneName, description, mpCount, dpReplicaNum, size, capacity, followerRead, authenticate, crossZone); err != nil {
+	if vol, err = m.cluster.createVol(name, owner, zoneName, description,
+					mpCount, dpReplicaNum, size, capacity,
+					followerRead, authenticate, crossZone,
+					defaultPriority); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
@@ -786,6 +794,7 @@ func newSimpleView(vol *Vol) *proto.SimpleVolView {
 		Description:        vol.description,
 		DpSelectorName:     vol.dpSelectorName,
 		DpSelectorParm:     vol.dpSelectorParm,
+		DefaultZonePrior:   vol.defaultPriority,
 	}
 }
 
@@ -919,6 +928,134 @@ func (m *Server) setNodeInfoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodeinfo params %v successfully", params)))
 
+}
+func (m *Server) updateNodesetCapcity(zoneName string, nodesetId uint64, capcity int) (err error) {
+	var ns  *nodeSet
+	var ok bool
+	var value interface{}
+	if capcity < defaultReplicaNum || capcity > 100 {
+		err = fmt.Errorf("capcity [%v] value out of scope", capcity)
+		return
+	}
+	if value, ok = m.cluster.t.zoneMap.Load(zoneName); !ok {
+		err = fmt.Errorf("zonename [%v] not found", zoneName)
+		return
+	}
+	zone := value.(*Zone)
+	if ns, ok = zone.nodeSetMap[nodesetId]; !ok {
+		err = fmt.Errorf("nodesetId [%v] not found", nodesetId)
+		return
+	}
+	ns.Lock()
+	defer ns.Unlock()
+
+	ns.Capacity = capcity
+	m.cluster.syncUpdateNodeSet(ns)
+	return
+}
+
+func (m *Server) buildNodeSetGrpInfoByID(id uint64) (*proto.SimpleNodeSetGrpInfo, error) {
+	nsgm := m.cluster.nodeSetGrpManager
+	var index int
+	for index = 0; index < len(nsgm.nodeSetGrpMap); index++ {
+		if nsgm.nodeSetGrpMap[index].ID == id {
+			break
+		}
+		if nsgm.nodeSetGrpMap[index].ID > id {
+			return nil, fmt.Errorf("id not found")
+		}
+	}
+	if index == len(nsgm.nodeSetGrpMap) {
+		return nil, fmt.Errorf("id not found")
+	}
+	return m.buildNodeSetGrpInfo(index), nil
+}
+
+func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
+	nsgm := m.cluster.nodeSetGrpManager
+	nsg := nsgm.nodeSetGrpMap[index]
+	nsgStat := new(proto.SimpleNodeSetGrpInfo)
+	nsgStat.ID = nsg.ID
+	nsgStat.Status = nsg.status
+	for i := 0; i < len(nsg.nodeSets); i++ {
+		var nsStat proto.SimpleNodeSet
+		nsStat.ID = nsg.nodeSets[i].ID
+		nsStat.Capacity = nsg.nodeSets[i].Capacity
+		nsStat.ZoneName = nsg.nodeSets[i].zoneName
+		nsg.nodeSets[i].dataNodes.Range(func(key, value interface{}) bool {
+			node := value.(*DataNode)
+			nsStat.DataTotal += node.Total
+			nsStat.DataUsed += node.Used
+			log.LogInfof("nodeset index[%v], datanode nodeset id[%v],zonename[%v], addr[%v] inner nodesetid[%v]",
+				i, nsStat.ID, node.ZoneName, node.Addr, node.NodeSetID)
+			nsStat.DataNodes = append(nsStat.DataNodes, proto.NodeView{ID: node.ID, Addr: node.Addr,
+				Status: node.isActive, IsWritable: node.isWriteAble()})
+			return true
+		})
+		nsg.nodeSets[i].metaNodes.Range(func(key, value interface{}) bool {
+			node := value.(*MetaNode)
+			nsStat.MetaTotal += node.Total
+			nsStat.MetaUsed += node.Used
+			log.LogInfof("nodeset index[%v], metanode nodeset id[%v],zonename[%v], addr[%v] inner nodesetid[%v]",
+				i, nsStat.ID, node.ZoneName, node.Addr, node.NodeSetID)
+			nsStat.MetaNodes = append(nsStat.MetaNodes, proto.NodeView{ID: node.ID, Addr: node.Addr,
+									Status: node.IsActive, IsWritable: node.isWritable()})
+			return true
+		})
+
+		nsgStat.NodeSetInfo = append(nsgStat.NodeSetInfo, nsStat)
+		log.LogInfof("nodeset index[%v], nodeset id[%v],capacity[%v], datatotal[%v] dataused[%v] metatotal[%v] metaused[%v], metanode[%v], datanodes[%v]",
+				i, nsStat.ID, nsStat.Capacity, nsStat.DataTotal, nsStat.DataUsed, nsStat.MetaTotal, nsStat.MetaUsed, nsStat.MetaNodes, nsStat.DataNodes)
+	}
+	return nsgStat
+}
+func (m *Server) upDataNodeSetCapacityHandler(w http.ResponseWriter, r *http.Request) {
+	var (
+		params map[string]interface{}
+		err    error
+	)
+	if params, err = parseAndExtractSetNodeSetInfoParams(r); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	if  err:= m.updateNodesetCapcity(params[zoneNameKey].(string), params[idKey].(uint64), params[countKey].(int)); err == nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+	}
+	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
+}
+
+// get metanode some interval params
+func (m *Server) getNodeSetGrpInfoHandler(w http.ResponseWriter, r *http.Request) {
+	var err    error
+	if err = r.ParseForm(); err != nil {
+		sendOkReply(w, r, newErrHTTPReply(err))
+	}
+	var value string
+	var id uint64
+	if value = r.FormValue(idKey); value != "" {
+		id, err = strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		}
+	}
+	log.LogInfof("action[getNodeSetGrpInfoHandler] id [%v]", id)
+	var info *proto.SimpleNodeSetGrpInfo
+	if info, err = m.buildNodeSetGrpInfoByID(id); err != nil {
+		sendErrReply(w, r, newErrHTTPReply(err))
+	}
+	sendOkReply(w, r, newSuccessHTTPReply(info))
+}
+
+// get metanode some interval params
+func (m *Server) getAllNodeSetGrpInfoHandler(w http.ResponseWriter, r *http.Request) {
+	var i int
+	nsgm := m.cluster.nodeSetGrpManager
+	nsglStat := new(proto.SimpleNodeSetGrpInfoList)
+	for i = 0; i < len(nsgm.nodeSetGrpMap) ; i++ {
+		log.LogInfof("action[getAllNodeSetGrpInfoHandler] index [%v],id [%v],Print inner nodeset now!", i, nsgm.nodeSetGrpMap[i].ID)
+		nsglStat.SimpleNodeSetGrpInfo = append(nsglStat.SimpleNodeSetGrpInfo, m.buildNodeSetGrpInfo(i))
+	}
+	sendOkReply(w, r, newSuccessHTTPReply(nsglStat))
 }
 
 // get metanode some interval params
@@ -1464,7 +1601,11 @@ func parseRequestToSetVolCapacity(r *http.Request) (name, authKey string, capaci
 	return
 }
 
-func parseRequestToCreateVol(r *http.Request) (name, owner, zoneName, description string, mpCount, dpReplicaNum, size, capacity int, followerRead, authenticate, crossZone bool, err error) {
+func parseRequestToCreateVol(r *http.Request) (name, owner, zoneName, description string,
+		mpCount, dpReplicaNum, size,
+		capacity int, followerRead,
+		authenticate, crossZone, defaultPriority,
+		err error) {
 	if err = r.ParseForm(); err != nil {
 		return
 	}
@@ -1510,6 +1651,10 @@ func parseRequestToCreateVol(r *http.Request) (name, owner, zoneName, descriptio
 	if crossZone, err = extractCrossZone(r); err != nil {
 		return
 	}
+	if defaultPriority, err = extractDefaulPriority(r); err != nil {
+		return
+	}
+
 	zoneName = r.FormValue(zoneNameKey)
 	description = r.FormValue(descriptionKey)
 	return
@@ -1703,6 +1848,19 @@ func extractCrossZone(r *http.Request) (crossZone bool, err error) {
 	return
 }
 
+func extractDefaulPriority(r *http.Request) (defaultPrior bool, err error) {
+	var value string
+	if value = r.FormValue(defaultPriority); value == "" {
+		defaultPrior = false
+		return
+	}
+	if defaultPrior, err = strconv.ParseBool(value); err != nil {
+		return
+	}
+	return
+}
+
+
 func parseAndExtractThreshold(r *http.Request) (threshold float64, err error) {
 	if err = r.ParseForm(); err != nil {
 		return
@@ -1717,7 +1875,36 @@ func parseAndExtractThreshold(r *http.Request) (threshold float64, err error) {
 	}
 	return
 }
-
+func parseAndExtractSetNodeSetInfoParams(r *http.Request) (params map[string]interface{}, err error) {
+	if err = r.ParseForm(); err != nil {
+		return
+	}
+	var value string
+	params = make(map[string]interface{})
+	if value = r.FormValue(countKey); value != "" {
+		var count = uint64(0)
+		count, err = strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			err = unmatchedKey(countKey)
+			return
+		}
+		params[countKey] = count
+	}
+	var zoneName string
+	if zoneName = r.FormValue(zoneNameKey); zoneName == "" {
+		zoneName = DefaultZoneName
+	}
+	if value = r.FormValue(idKey); value != "" {
+		var nodesetId = uint64(0)
+		nodesetId, err = strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			err = unmatchedKey(idKey)
+			return
+		}
+		params[idKey] = nodesetId
+	}
+	return
+}
 func parseAndExtractSetNodeInfoParams(r *http.Request) (params map[string]interface{}, err error) {
 	if err = r.ParseForm(); err != nil {
 		return

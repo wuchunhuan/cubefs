@@ -244,7 +244,15 @@ func (m *Server) registerAPIRoutes(router *mux.Router) {
 	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
 		Path(proto.AdminGetNodeInfo).
 		HandlerFunc(m.getNodeInfoHandler)
-
+	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
+		Path(proto.AdminGetAllNodeSetGrpInfo).
+		HandlerFunc(m.getAllNodeSetGrpInfoHandler)
+	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
+		Path(proto.AdminGetNodeSetGrpInfo).
+		HandlerFunc(m.getNodeSetGrpInfoHandler)
+	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
+		Path(proto.AdminUpdateNodeSetCapcity).
+		HandlerFunc(m.upDataNodeSetCapacityHandler)
 	// user management APIs
 	router.NewRoute().Methods(http.MethodPost).
 		Path(proto.UserCreate).
