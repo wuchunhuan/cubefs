@@ -55,8 +55,7 @@ func GetConsulId(app string, role string, host string, port int64) string {
 // do consul register process
 func DoConsulRegisterProc(addr, app, role, cluster, meta, host string, port int64) {
 	if len(addr) <= 0 {
-		log.LogInfo("consul addr is empty, use default, consul.ums.oppo.local ")
-		addr = "consul.ums.oppo.local"
+
 		return
 	}
 	log.LogInfof("metrics consul register %v %v %v", addr, cluster, port)
@@ -160,6 +159,10 @@ func makeRegisterReq(host, addr, app, role, cluster, meta string, port int64) (r
 		cInfo.Meta = metas
 		cInfo.Meta["cluster"] = cluster
 		cInfo.Meta["commit"] = proto.CommitID
+		if len(cInfo.Meta["metric_path"]) == 0 {
+			cInfo.Meta["metric_path"] = "/metrics"
+			log.LogInfo("metric_path is empty, use default /metrics")
+		}
 	}
 
 	cInfoBytes, err := json.Marshal(cInfo)
