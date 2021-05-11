@@ -74,9 +74,10 @@ func Init(role string, cfg *config.Config) {
 
 	port := cfg.GetInt64(ConfigKeyExporterPort)
 	if port == 0 {
-		log.LogInfof("%v exporter port not set", port)
-		return
+		log.LogInfof("%v exporter port not set, use default 17510", port)
+		port = 17510
 	}
+
 	exporterPort = port
 	enabledPrometheus = true
 	http.Handle(PromHandlerPattern, promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
@@ -139,6 +140,17 @@ func RegistConsul(cluster string, role string, cfg *config.Config) {
 	if exporterPort == int64(0) {
 		exporterPort = cfg.GetInt64(ConfigKeyExporterPort)
 	}
+
+	if exporterPort == 0 {
+		log.LogInfo("config export port is 0, use default 17510")
+		exporterPort = 17510
+	}
+
+	if len(consulAddr) <= 0 {
+		log.LogInfo("consul addr is empty, use default, consul.ums.oppo.local ")
+		consulAddr = "consul.ums.oppo.local"
+	}
+
 	if exporterPort != int64(0) && len(consulAddr) > 0 {
 		if ok := strings.HasPrefix(consulAddr, "http"); !ok {
 			consulAddr = "http://" + consulAddr

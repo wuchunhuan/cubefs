@@ -1584,7 +1584,7 @@ func (c *Cluster) createVol(name, owner, zoneName, description string, mpCount, 
 		dataPartitionSize       uint64
 		readWriteDataPartitions int
 	)
-	if size == 0 {
+	if size * util.GB < util.DefaultDataPartitionSize {
 		dataPartitionSize = util.DefaultDataPartitionSize
 	} else {
 		dataPartitionSize = uint64(size) * util.GB
