@@ -1604,7 +1604,7 @@ func parseRequestToSetVolCapacity(r *http.Request) (name, authKey string, capaci
 func parseRequestToCreateVol(r *http.Request) (name, owner, zoneName, description string,
 		mpCount, dpReplicaNum, size,
 		capacity int, followerRead,
-		authenticate, crossZone, defaultPriority,
+		authenticate, crossZone, defaultPriority bool,
 		err error) {
 	if err = r.ParseForm(); err != nil {
 		return

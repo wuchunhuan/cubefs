@@ -92,7 +92,6 @@ const (
 	cmdVolDefaultCapacity       = 10 // 100GB
 	cmdVolDefaultReplicas       = 3
 	cmdVolDefaultFollowerReader = true
-	cmdVolDefaultZoneName       = "default"
 	cmdVolDefaultZoneName = ""
 	cmdVolDefaultCrossZone = false
 )

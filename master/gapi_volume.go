@@ -175,7 +175,7 @@ func (s *VolumeService) volPermission(ctx context.Context, args struct {
 func (s *VolumeService) createVolume(ctx context.Context, args struct {
 	Name, Owner, ZoneName, Description                 string
 	Capacity, DataPartitionSize, MpCount, DpReplicaNum uint64
-	FollowerRead, Authenticate, CrossZone, DefaultPriority}) (*Vol, error) {
+	FollowerRead, Authenticate, CrossZone, DefaultPriority bool}) (*Vol, error) {
 	uid, per, err := permissions(ctx, ADMIN|USER)
 	if err != nil {
 		return nil, err

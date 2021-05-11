@@ -1646,7 +1646,7 @@ errHandler:
 // By default we create 3 meta partitions and 10 data partitions during initialization.
 func (c *Cluster) createVol(name, owner, zoneName, description string,
 			mpCount, dpReplicaNum, size, capacity int,
-			followerRead, authenticate, crossZone, defaultPriority) (vol *Vol, err error) {
+			followerRead, authenticate, crossZone, defaultPriority bool) (vol *Vol, err error) {
 	var (
 		dataPartitionSize       uint64
 		readWriteDataPartitions int
