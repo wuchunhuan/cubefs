@@ -391,11 +391,7 @@ func (nsgm *nodeSetGrpManager) buildNodeSetGrp() (err error) {
 		err = method[zoneCnt](nsgm)
 		if err != nil {
 			log.LogInfof("action[buildNodeSetGrp] err [%v]", err)
-			zoneCnt--
-			if zoneCnt == 0 {
-				break
-			}
-			continue
+			break
 		}
 		step--
 		if step == 0 {
