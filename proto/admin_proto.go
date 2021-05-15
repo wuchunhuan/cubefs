@@ -39,9 +39,10 @@ const (
 	AdminListVols                  = "/vol/list"
 	AdminSetNodeInfo               = "/admin/setNodeInfo"
 	AdminGetNodeInfo               = "/admin/getNodeInfo"
-	AdminGetAllNodeSetGrpInfo               = "/admin/getNodeAllSetGrpInfo"
-	AdminGetNodeSetGrpInfo               = "/admin/getNodeSetGrpInfo"
-	AdminUpdateNodeSetCapcity			 = "/admin/updateNodeSetCapcity"
+	AdminGetAllNodeSetGrpInfo      = "/admin/getNodeAllSetGrpInfo"
+	AdminGetNodeSetGrpInfo         = "/admin/getNodeSetGrpInfo"
+	AdminUpdateNodeSetCapcity      = "/admin/updateNodeSetCapcity"
+	AdminUpdateNodeSetId           = "/admin/updateNodeSetId"
 	//graphql master api
 	AdminClusterAPI = "/api/cluster"
 	AdminUserAPI    = "/api/user"

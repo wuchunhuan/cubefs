@@ -929,6 +929,101 @@ func (m *Server) setNodeInfoHandler(w http.ResponseWriter, r *http.Request) {
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodeinfo params %v successfully", params)))
 
 }
+
+func (m *Server) updateNodesetId(zoneName string, destNodesetId uint64, nodeType uint64, addr string) (err error) {
+	var (
+		nsId     uint64
+		dstNs    *nodeSet
+		srcNs    *nodeSet
+		ok       bool
+		value    interface{}
+		metaNode *MetaNode
+		dataNode *DataNode
+	)
+	defer func() {
+		log.LogInfof("action[updateNodesetId] step out")
+	}()
+	log.LogWarnf("action[updateNodesetId] zonename[%v] destNodesetId[%v] nodeType[%v] addr[%v]",
+			zoneName, destNodesetId, nodeType, addr)
+
+	if value, ok = m.cluster.t.zoneMap.Load(zoneName); !ok {
+		return fmt.Errorf("zonename [%v] not found", zoneName)
+	}
+	zone := value.(*Zone)
+	if dstNs, ok = zone.nodeSetMap[destNodesetId]; !ok {
+		return fmt.Errorf("%v destNodesetId not found", destNodesetId)
+	}
+	if uint32(nodeType) == TypeDataPartion {
+		value, ok = zone.dataNodes.Load(addr)
+		if !ok {
+			return fmt.Errorf("addr %v not found", addr)
+		}
+		nsId = value.(*DataNode).NodeSetID
+	} else if uint32(nodeType) == TypeMetaPartion {
+		value, ok = zone.metaNodes.Load(addr)
+		if !ok {
+			return fmt.Errorf("addr %v not found", addr)
+		}
+		nsId = value.(*MetaNode).NodeSetID
+	} else {
+		return fmt.Errorf("%v wrong type", nodeType)
+	}
+	log.LogInfof("action[updateNodesetId] zonename[%v] destNodesetId[%v] nodeType[%v] addr[%v] get destid[%v]",
+		zoneName, destNodesetId, nodeType, addr, dstNs.ID)
+	srcNs = zone.nodeSetMap[nsId]
+	if srcNs.ID == dstNs.ID {
+		return fmt.Errorf("addr belong to same nodeset")
+	} else if srcNs.ID < dstNs.ID {
+		// take parallel call updatenodeid and defer unlock order into consider
+		srcNs.Lock()
+		dstNs.Lock()
+		defer srcNs.Unlock()
+		defer dstNs.Unlock()
+	} else {
+		// take parallel call updatenodeid and defer unlock order into consider
+		dstNs.Lock()
+		srcNs.Lock()
+		defer dstNs.Unlock()
+		defer srcNs.Unlock()
+	}
+
+	// the nodeset capcity not enlarged if node be added,capacity can be adjust by
+	// AdminUpdateNodeSetCapcity
+	if uint32(nodeType) == TypeDataPartion {
+		if value, ok = srcNs.dataNodes.Load(addr); !ok {
+			return fmt.Errorf("addr not found in srcNs.dataNodes")
+		}
+		dataNode = value.(*DataNode)
+		dataNode.NodeSetID = dstNs.ID
+		dstNs.putDataNode(dataNode)
+		srcNs.deleteDataNode(dataNode)
+		if err = m.cluster.syncUpdateDataNode(dataNode); err != nil {
+			dataNode.NodeSetID = srcNs.ID
+			return
+		}
+	} else {
+		if value, ok = srcNs.metaNodes.Load(addr); !ok {
+			return fmt.Errorf("ddr not found in srcNs.metaNodes")
+		}
+		metaNode = value.(*MetaNode)
+		metaNode.NodeSetID = dstNs.ID
+		dstNs.putMetaNode(metaNode)
+		srcNs.deleteMetaNode(metaNode)
+		if err = m.cluster.syncUpdateMetaNode(metaNode); err != nil {
+			dataNode.NodeSetID = srcNs.ID
+			return
+		}
+	}
+	if err = m.cluster.syncUpdateNodeSet(dstNs); err != nil {
+		return fmt.Errorf("warn:syncUpdateNodeSet dst srcNs [%v] failed", dstNs.ID)
+	}
+	if err = m.cluster.syncUpdateNodeSet(srcNs); err != nil {
+		return fmt.Errorf("warn:syncUpdateNodeSet src srcNs [%v] failed", srcNs.ID)
+	}
+
+	return
+}
+
 func (m *Server) updateNodesetCapcity(zoneName string, nodesetId uint64, capcity int) (err error) {
 	var ns  *nodeSet
 	var ok bool
@@ -1022,6 +1117,48 @@ func (m *Server) upDataNodeSetCapacityHandler(w http.ResponseWriter, r *http.Req
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 	}
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
+}
+
+func (m *Server) upDataNodeSetIdHandler(w http.ResponseWriter, r *http.Request) {
+	var (
+		nodeAddr     string
+		id           uint64
+		zoneName     string
+		err          error
+		nodeType     uint64
+		value        string
+	)
+	defer func() {
+		if err != nil {
+			sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		}
+	}()
+	if zoneName = r.FormValue(zoneNameKey); zoneName == "" {
+		zoneName = DefaultZoneName
+	}
+	if err = r.ParseForm(); err != nil {
+		return
+	}
+	if nodeAddr, err = extractNodeAddr(r); err != nil {
+		return
+	}
+	if id, err = extractNodeID(r); err != nil {
+		return
+	}
+	if value = r.FormValue(nodeTypeKey); value == "" {
+		err = fmt.Errorf("need param nodeType")
+		return
+	}
+
+	if nodeType, err = strconv.ParseUint(value, 10, 64); err != nil {
+		return
+	}
+
+	if  err = m.updateNodesetId(zoneName, id, nodeType, nodeAddr); err != nil {
+		return
+	}
+
+	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("update node setid successfully")))
 }
 
 // get metanode some interval params
