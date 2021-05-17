@@ -755,6 +755,12 @@ func (nsgm *nodeSetGrpManager) putNodeSet(ns *nodeSet, load bool) (err error){
 			ns.zoneName, ns.ID, len(nsgm.zoneAvailableNodeSet))
 		return
 	}
+	if _, ok := nsgm.nsIdMap[ns.ID]; ok {
+		log.LogInfof("action[nodeSetGrpManager::putNodeSet]  zone[%v],nodesetid:[%v] already be put before load[%v]",
+			ns.zoneName, ns.ID, load)
+		return
+	}
+	nsgm.nsIdMap[ns.ID] = 0
 	// nodeset alreay be put into grp,this should be happened at condition of load == true
 	// here hosts in ns should be nullptr and wait node register
 	if grpidx, ok := nsgm.nsId2NsGrpMap[ns.ID]; ok {
@@ -763,12 +769,6 @@ func (nsgm *nodeSetGrpManager) putNodeSet(ns *nodeSet, load bool) (err error){
 			ns.zoneName, ns.ID, grpidx, nsgm.nodeSetGrpMap[grpidx].ID, load)
 		return
 	}
-	if _, ok := nsgm.nsIdMap[ns.ID]; ok {
-		log.LogInfof("action[nodeSetGrpManager::putNodeSet]  zone[%v],nodesetid:[%v] already be put before load[%v]",
-			ns.zoneName, ns.ID, load)
-		return
-	}
-	nsgm.nsIdMap[ns.ID] = 0
 	if _, ok := nsgm.zoneAvailableNodeSet[ns.zoneName]; !ok {
 		nsgm.zoneAvailableNodeSet[ns.zoneName] = list.New()
 		log.LogInfof("action[nodeSetGrpManager::putNodeSet] init list for zone[%v],zonelist size[%v]",ns.zoneName, len(nsgm.zoneAvailableNodeSet))
