@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -798,18 +799,47 @@ func newSimpleView(vol *Vol) *proto.SimpleVolView {
 	}
 }
 
+func checkIp(addr string) bool {
+	var arr []string
+	if arr = strings.Split(addr, ":"); len(arr) < 2 {
+		return false
+	}
+	if id, err := strconv.ParseUint(arr[1], 10, 64);err != nil || id > 65535 || id < 1024 {
+		return false
+	}
+	ip := strings.Trim(addr, " ")
+	regStr := `^(([1-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.)(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){2}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])`
+	if match, _ := regexp.MatchString(regStr, ip); match {
+		return true
+	}
+	return false
+}
+
 func (m *Server) addDataNode(w http.ResponseWriter, r *http.Request) {
 	var (
-		nodeAddr string
-		zoneName string
-		id       uint64
-		err      error
+		nodeAddr  string
+		zoneName  string
+		id        uint64
+		err       error
+		nodesetId uint64
 	)
 	if nodeAddr, zoneName, err = parseRequestForAddNode(r); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if id, err = m.cluster.addDataNode(nodeAddr, zoneName); err != nil {
+	if !checkIp(nodeAddr) {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: fmt.Errorf("addr not legal").Error()})
+		return
+	}
+	var value string
+	if value = r.FormValue(idKey); value == "" {
+		nodesetId = 0
+	} else {
+		if nodesetId, err = strconv.ParseUint(value, 10, 64); err != nil {
+			sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		}
+	}
+	if id, err = m.cluster.addDataNode(nodeAddr, zoneName, nodesetId); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
@@ -929,7 +959,14 @@ func (m *Server) setNodeInfoHandler(w http.ResponseWriter, r *http.Request) {
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodeinfo params %v successfully", params)))
 
 }
+func (m *Server) updateDataUseRatio(ratio float64) (err error) {
+	m.cluster.nodeSetGrpManager.Lock()
+	defer m.cluster.nodeSetGrpManager.Unlock()
 
+	m.cluster.nodeSetGrpManager.dataRatio = ratio
+	err = m.cluster.putZoneDomain()
+	return
+}
 func (m *Server) updateNodesetId(zoneName string, destNodesetId uint64, nodeType uint64, addr string) (err error) {
 	var (
 		nsId     uint64
@@ -1104,7 +1141,7 @@ func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
 	}
 	return nsgStat
 }
-func (m *Server) upDataNodeSetCapacityHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Server) updateNodeSetCapacityHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		params map[string]interface{}
 		err    error
@@ -1119,7 +1156,28 @@ func (m *Server) upDataNodeSetCapacityHandler(w http.ResponseWriter, r *http.Req
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
 }
 
-func (m *Server) upDataNodeSetIdHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Server) updateDataUseRatioHandler(w http.ResponseWriter, r *http.Request) {
+	var (
+		params map[string]interface{}
+		err    error
+	)
+	var value string
+	if value = r.FormValue(ratio); value == "" {
+		err = keyNotFound(ratio)
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+	}
+	var ratioVal float64
+	if ratioVal, err = strconv.ParseFloat(value, 64); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+	}
+
+	if  err:= m.updateDataUseRatio(ratioVal); err == nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+	}
+	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
+}
+
+func (m *Server) updateNodeSetIdHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		nodeAddr     string
 		id           uint64
@@ -1188,6 +1246,11 @@ func (m *Server) getAllNodeSetGrpInfoHandler(w http.ResponseWriter, r *http.Requ
 	var i int
 	nsgm := m.cluster.nodeSetGrpManager
 	nsglStat := new(proto.SimpleNodeSetGrpInfoList)
+	nsglStat.DomainOn = m.cluster.FaultDomain
+	nsglStat.NeedDomain = m.cluster.needFaultDomain
+	nsglStat.DataRatio = nsgm.dataRatio
+	nsglStat.Status = nsgm.status
+
 	for i = 0; i < len(nsgm.nodeSetGrpMap) ; i++ {
 		log.LogInfof("action[getAllNodeSetGrpInfoHandler] index [%v],id [%v],Print inner nodeset now!", i, nsgm.nodeSetGrpMap[i].ID)
 		nsglStat.SimpleNodeSetGrpInfo = append(nsglStat.SimpleNodeSetGrpInfo, m.buildNodeSetGrpInfo(i))
@@ -1300,12 +1363,25 @@ func (m *Server) addMetaNode(w http.ResponseWriter, r *http.Request) {
 		zoneName string
 		id       uint64
 		err      error
+		nodesetId uint64
 	)
 	if nodeAddr, zoneName, err = parseRequestForAddNode(r); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if id, err = m.cluster.addMetaNode(nodeAddr, zoneName); err != nil {
+	if !checkIp(nodeAddr) {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: fmt.Errorf("addr not legal").Error()})
+		return
+	}
+	var value string
+	if value = r.FormValue(idKey); value == "" {
+		nodesetId = 0
+	} else {
+		if nodesetId, err = strconv.ParseUint(value, 10, 64); err != nil {
+			sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		}
+	}
+	if id, err = m.cluster.addMetaNode(nodeAddr, zoneName, nodesetId); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}

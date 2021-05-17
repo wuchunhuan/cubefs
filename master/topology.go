@@ -31,6 +31,7 @@ type topology struct {
 	zoneIndexForDataNode int
 	zoneIndexForMetaNode int
 	zones                []*Zone
+	domainExcludeZones   []string
 	zoneLock             sync.RWMutex
 }
 
@@ -208,7 +209,7 @@ type nodeSetGrpManager struct {
 	lastBuildIndex        int            // build index for 2 plus 1 policy,multi zones need banlance build
 	status                uint8          // all nodesetGrp may be unavaliable or no nodesetGrp be exist on given policy
 	nsIdMap               map[uint64]int // store all ns alreay be put into manager
-
+	dataRatio             float64
 	sync.RWMutex
 }
 
@@ -221,6 +222,7 @@ func newNodeSetGrpManager(cls *Cluster) *nodeSetGrpManager {
 		nsId2NsGrpMap:         make(map[uint64]int),
 		excludeZoneListDomain: make(map[string]int),
 		nsIdMap:               make(map[uint64]int),
+		dataRatio:             defaultDataPartitionUsageThreshold,
 	}
 	return ns
 }
@@ -262,6 +264,9 @@ func (nsgm *nodeSetGrpManager) checkExcludeZoneState() {
 			metaNeedDomain, dataNeedDomain)
 		nsgm.c.needFaultDomain = true
 	} else {
+		if nsgm.c.needFaultDomain == true {
+			log.LogInfof("action[checkExcludeZoneState] needFaultDomain be set false")
+		}
 		nsgm.c.needFaultDomain = false
 	}
 }
@@ -282,22 +287,31 @@ func (nsgm *nodeSetGrpManager) checkGrpState() {
 		grpStatus := normal
 		grpMetaUnAvailableCnt := 0
 		for j := 0; j < len(nsgm.nodeSetGrpMap[i].nodeSets); j++ {
-			var metaWorked bool
-			var dataWorked bool
-
+			var (
+				metaWorked bool
+				dataWorked bool
+				used 	uint64
+				total 	uint64
+			)
 			nsgm.nodeSetGrpMap[i].nodeSets[j].dataNodes.Range(func(key, value interface{}) bool {
 				node := value.(*DataNode)
-				if node.isWriteAble() && node.UsageRatio <= defaultDataPartitionUsageThreshold {
-					dataWorked = true
-					log.LogInfof("action[checkGrpState] nodeset[%v] zonename[%v] used [%v] total [%v] UsageRatio [%v] got avaliable metanode",
-						node.ID, node.ZoneName, node.Used, node.Total, node.UsageRatio)
-					return false
+				if node.isWriteAble() {
+					used = used + node.Used
+				} else {
+					used = used + node.Total
 				}
-				log.LogInfof("action[checkGrpState] nodeset[%v] zonename[%v] used [%v] total [%v] UsageRatio [%v] got avaliable metanode",
+				total = total + node.Total
+
+				log.LogInfof("action[checkGrpState] nodeid[%v] zonename[%v] used [%v] total [%v] UsageRatio [%v] got avaliable metanode",
 					node.ID, node.ZoneName, node.Used, node.Total, node.UsageRatio)
 				return true
 			})
 
+			if float64(used) / float64(total) <  nsgm.dataRatio {
+				log.LogInfof("action[checkGrpState] nodeset id [%v] zonename[%v] is fine. used [%v] total [%v] UsageRatio [%v] got avaliable metanode",
+					nsgm.nodeSetGrpMap[i].nodeSets[j].ID, nsgm.nodeSetGrpMap[i].nodeSets[j].zoneName, used, total, float64(used) / float64(total))
+				dataWorked = true
+			}
 			nsgm.nodeSetGrpMap[i].nodeSets[j].metaNodes.Range(func(key, value interface{}) bool {
 				node := value.(*MetaNode)
 				if node.isWritable() {
@@ -498,7 +512,8 @@ func (nsgm *nodeSetGrpManager) getHostFromNodeSetGrp(replicaNum uint8, createTyp
 	// nodesetGrp with zones less than three,because offer service is much more important than high available
 	if len(nsgm.zoneAvailableNodeSet) != 0 {
 		if nsgm.buildNodeSetGrp(); len(nsgm.nodeSetGrpMap) == 0 {
-			log.LogInfof("action[getHostFromNodeSetGrp] no useable group build failed,err[%v]", err)
+			err = fmt.Errorf("no usable group and build failed")
+			log.LogInfof("action[getHostFromNodeSetGrp] err[%v]", err)
 			return
 		}
 	}
@@ -704,42 +719,40 @@ func buildNodeSetGrp2Plus1(nsgm *nodeSetGrpManager) (err error){
 
 	cnt := 0
 	var resList []nsList
-	buildIndex, zoneAvaVec := nsgm.buildNodeSetGrpPrepare()
-	var np1, np2 *list.List
-	for {
-		if cnt > 0 {
-			buildIndex = (buildIndex + 1) % len(zoneAvaVec)
-		}
-		if cnt == len(zoneAvaVec) {
-			log.LogInfof("step out inner loop in buildNodeSetGrp2Plus1 cnt [%v], inner index [%v]", cnt, buildIndex)
-			break
-		}
-		cnt++
-		nodeList := zoneAvaVec[buildIndex]
-		if nodeList.lst.Len() == 0 {
-			log.LogInfof("step continue in loop in buildNodeSetGrp2Plus1 cnt [%v], inner index [%v]", cnt, buildIndex)
-			continue
-		}
-		if np1 == nil {
-			var tmpList []nsList
-			if tmpList, err = nsgm.buildNodeSetGrpDoWork(nodeList.zoneName, nodeList.lst, 1); err == nil {
-				np1 = nodeList.lst
-				resList = append(resList, tmpList...)
+	_, zoneAvaVec := nsgm.buildNodeSetGrpPrepare()
+	var np1, np2 int
+
+	if zoneAvaVec[0].lst.Len() <  zoneAvaVec[1].lst.Len() {
+		np1 = 0
+		np2 = 1
+	} else {
+		np1 = 1
+		np2 = 0
+	}
+	for i:=2; i < len(zoneAvaVec); i++{
+		if zoneAvaVec[i].lst.Len() > zoneAvaVec[np1].lst.Len() {
+			if zoneAvaVec[i].lst.Len() > zoneAvaVec[np2].lst.Len() {
+				np2 = i
+			} else {
+				np1 = i
 			}
-			continue
-		}
-		var tmpList []nsList
-		if tmpList, err = nsgm.buildNodeSetGrpDoWork(nodeList.zoneName, nodeList.lst, 2); err == nil {
-			np2 = nodeList.lst
-			resList = append(resList, tmpList...)
-			break
 		}
 	}
-	if np1 == nil || np2 == nil {
+	if zoneAvaVec[np1].lst.Len() < 1 ||  zoneAvaVec[np2].lst.Len() < 2 {
 		log.LogInfof("step out buildNodeSetGrp2Plus1 np1 [%v] np2 [%v] cnt [%v], inner index [%v]",
 					np1, np2, cnt, nsgm.lastBuildIndex)
 		return fmt.Errorf("action[buildNodeSetGrp2Plus1] failed")
 	}
+
+	var tmpList []nsList
+	if tmpList, err = nsgm.buildNodeSetGrpDoWork(zoneAvaVec[np1].zoneName, zoneAvaVec[np1].lst, 1); err != nil {
+		return
+	}
+	resList = append(resList, tmpList...)
+	if tmpList, err = nsgm.buildNodeSetGrpDoWork(zoneAvaVec[np2].zoneName, zoneAvaVec[np2].lst, 2); err != nil {
+		return
+	}
+	resList = append(resList, tmpList...)
 	nsgm.buildNodeSetGrpCommit(resList)
 	return
 }
@@ -880,6 +893,17 @@ func (t *topology) isSingleZone() bool {
 	return zoneLen == 1
 }
 
+func (t *topology) getDomainExcludeZones() (zones []*Zone) {
+	t.zoneLock.RLock()
+	defer t.zoneLock.RUnlock()
+	for i:= 0; i < len(t.domainExcludeZones); i++ {
+		if value, ok := t.zoneMap.Load(t.domainExcludeZones[i]); ok {
+			zones = append(zones, value.(*Zone))
+		}
+	}
+	return
+}
+
 func (t *topology) getAllZones() (zones []*Zone) {
 	t.zoneLock.RLock()
 	defer t.zoneLock.RUnlock()
@@ -912,7 +936,13 @@ func calculateDemandWriteNodes(zoneNum int, replicaNum int) (demandWriteNodes in
 }
 
 func (t *topology) allocZonesForMetaNode(zoneNum, replicaNum int, excludeZone []string) (zones []*Zone, err error) {
-	zones = t.getAllZones()
+	if len(t.domainExcludeZones) > 0 {
+		zones = t.getDomainExcludeZones()
+		log.LogInfof("action[allocZonesForMetaNode] getDomainExcludeZones zones [%v]", zones)
+	} else {
+		// if domain enable, will not enter here
+		zones = t.getAllZones()
+	}
 	if t.isSingleZone() {
 		return zones, nil
 	}
@@ -953,7 +983,13 @@ func (t *topology) allocZonesForMetaNode(zoneNum, replicaNum int, excludeZone []
 }
 
 func (t *topology) allocZonesForDataNode(zoneNum, replicaNum int, excludeZone []string) (zones []*Zone, err error) {
-	zones = t.getAllZones()
+	// domain enabled and have old zones to be used
+	if len(t.domainExcludeZones) > 0 {
+		zones = t.getDomainExcludeZones()
+	} else {
+		// if domain enable, will not enter here
+		zones = t.getAllZones()
+	}
 	log.LogInfof("len(zones) = %v \n", len(zones))
 	if t.isSingleZone() {
 		return zones, nil

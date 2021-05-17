@@ -33,16 +33,17 @@ const (
 	AdminGetVol                    = "/admin/getVol"
 	AdminClusterFreeze             = "/cluster/freeze"
 	AdminClusterStat               = "/cluster/stat"
-	AdminGetIP                     = "/admin/getIp"
-	AdminCreateMetaPartition       = "/metaPartition/create"
-	AdminSetMetaNodeThreshold      = "/threshold/set"
-	AdminListVols                  = "/vol/list"
-	AdminSetNodeInfo               = "/admin/setNodeInfo"
-	AdminGetNodeInfo               = "/admin/getNodeInfo"
-	AdminGetAllNodeSetGrpInfo      = "/admin/getNodeAllSetGrpInfo"
-	AdminGetNodeSetGrpInfo         = "/admin/getNodeSetGrpInfo"
-	AdminUpdateNodeSetCapcity      = "/admin/updateNodeSetCapcity"
-	AdminUpdateNodeSetId           = "/admin/updateNodeSetId"
+	AdminGetIP                = "/admin/getIp"
+	AdminCreateMetaPartition  = "/metaPartition/create"
+	AdminSetMetaNodeThreshold = "/threshold/set"
+	AdminListVols             = "/vol/list"
+	AdminSetNodeInfo          = "/admin/setNodeInfo"
+	AdminGetNodeInfo          = "/admin/getNodeInfo"
+	AdminGetAllNodeSetGrpInfo = "/admin/getNodeAllSetGrpInfo"
+	AdminGetNodeSetGrpInfo    = "/admin/getNodeSetGrpInfo"
+	AdminUpdateNodeSetCapcity = "/admin/updateNodeSetCapcity"
+	AdminUpdateNodeSetId      = "/admin/updateNodeSetId"
+	AdminUpdateDataUseRatio   = "/admin/updateDataRatio"
 	//graphql master api
 	AdminClusterAPI = "/api/cluster"
 	AdminUserAPI    = "/api/user"
@@ -503,6 +504,10 @@ type SimpleNodeSetGrpInfo struct {
 }
 
 type SimpleNodeSetGrpInfoList struct {
+	DomainOn             bool
+	DataRatio            float64
+	NeedDomain           bool
+	Status               uint8
 	SimpleNodeSetGrpInfo []*SimpleNodeSetGrpInfo
 }
 // MasterAPIAccessResp defines the response for getting meta partition

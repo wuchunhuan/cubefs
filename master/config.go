@@ -99,6 +99,7 @@ type clusterConfig struct {
 	diffSpaceUsage                      uint64
 	faultDomain                         bool
 	DomainNodeGrpBatchCnt               int
+	DataPartitionUsageThreshold         float64
 }
 
 func newClusterConfig() (cfg *clusterConfig) {
