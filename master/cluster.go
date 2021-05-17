@@ -47,14 +47,18 @@ type Cluster struct {
 	metaNodeStatInfo          *nodeStatInfo
 	zoneStatInfos             map[string]*proto.ZoneStat
 	volStatInfo               sync.Map
+	nodeSetGrpManager         *nodeSetGrpManager
 	BadDataPartitionIds       *sync.Map
 	BadMetaPartitionIds       *sync.Map
 	DisableAutoAllocate       bool
+	FaultDomain               bool
+	needFaultDomain			  bool    		// FaultDomain is true and normal zone aleady used up
 	fsm                       *MetadataFsm
 	partition                 raftstore.Partition
 	MasterSecretKey           []byte
 	lastMasterZoneForDataNode string
 	lastMasterZoneForMetaNode string
+	zoneList                  []string
 }
 
 func newCluster(name string, leaderInfo *LeaderInfo, fsm *MetadataFsm, partition raftstore.Partition, cfg *clusterConfig) (c *Cluster) {
@@ -68,10 +72,12 @@ func newCluster(name string, leaderInfo *LeaderInfo, fsm *MetadataFsm, partition
 	c.BadMetaPartitionIds = new(sync.Map)
 	c.dataNodeStatInfo = new(nodeStatInfo)
 	c.metaNodeStatInfo = new(nodeStatInfo)
+	c.FaultDomain = cfg.faultDomain
 	c.zoneStatInfos = make(map[string]*proto.ZoneStat)
 	c.fsm = fsm
 	c.partition = partition
 	c.idAlloc = newIDAllocator(c.fsm.store, c.partition)
+	c.nodeSetGrpManager = newNodeSetGrpManager(c)
 	return
 }
 
@@ -88,6 +94,7 @@ func (c *Cluster) scheduleTask() {
 	c.scheduleToCheckMetaPartitionRecoveryProgress()
 	c.scheduleToLoadMetaPartitions()
 	c.scheduleToReduceReplicaNum()
+	c.scheduleToCheckNodeSetGrpManagerStatus()
 }
 
 func (c *Cluster) masterAddr() (addr string) {
@@ -106,9 +113,27 @@ func (c *Cluster) scheduleToUpdateStatInfo() {
 
 }
 
+func (c *Cluster) addNodeSetGrp(ns *nodeSet, load bool) (err error){
+	log.LogWarnf("addNodeSetGrp nodeSet id[%v] zonename[%v] load[%v] grpManager init[%v]",
+				ns.ID, ns.zoneName, load, c.nodeSetGrpManager.init)
+	if c.nodeSetGrpManager.init {
+		err = c.nodeSetGrpManager.putNodeSet(ns, load)
+	}
+	return
+}
+
+const (
+	TypeMetaPartion          uint32 = 0x01
+	TypeDataPartion          uint32 = 0x02
+)
+
+func (c *Cluster) getAvaliableHostFromNsGrp(createType uint32, replicaNum uint8) (hosts []string, peers []proto.Peer, err error){
+	hosts, peers, err = c.nodeSetGrpManager.getHostFromNodeSetGrp(replicaNum, createType)
+	return
+}
+
 func (c *Cluster) scheduleToCheckAutoDataPartitionCreation() {
 	go func() {
-
 		// check volumes after switching leader two minutes
 		time.Sleep(2 * time.Minute)
 		for {
@@ -118,7 +143,7 @@ func (c *Cluster) scheduleToCheckAutoDataPartitionCreation() {
 					vol.checkAutoDataPartitionCreation(c)
 				}
 			}
-			time.Sleep(2 * time.Minute)
+			time.Sleep(5 * time.Second)
 		}
 	}()
 }
@@ -149,6 +174,19 @@ func (c *Cluster) scheduleToCheckVolStatus() {
 	}()
 }
 
+func (c *Cluster) scheduleToCheckNodeSetGrpManagerStatus() {
+	if c.FaultDomain == false || !c.partition.IsRaftLeader() {
+		return
+	}
+	go func() {
+		for {
+			c.nodeSetGrpManager.checkGrpState()
+			c.nodeSetGrpManager.checkExcludeZoneState()
+
+			time.Sleep(5 * time.Second)
+		}
+	}()
+}
 // Check the replica status of each data partition.
 func (c *Cluster) checkDataPartitions() {
 	defer func() {
@@ -163,7 +201,8 @@ func (c *Cluster) checkDataPartitions() {
 	for _, vol := range vols {
 		readWrites := vol.checkDataPartitions(c)
 		vol.dataPartitions.setReadWriteDataPartitions(readWrites, c.Name)
-		vol.dataPartitions.updateResponseCache(true, 0)
+		vol.dataPartitions.
+			updateResponseCache(true, 0)
 		msg := fmt.Sprintf("action[checkDataPartitions],vol[%v] can readWrite partitions:%v  ", vol.Name, vol.dataPartitions.readableAndWritableCnt)
 		log.LogInfo(msg)
 	}
@@ -449,11 +488,13 @@ func (c *Cluster) addMetaNode(nodeAddr, zoneName string) (id uint64, err error) 
 			goto errHandler
 		}
 	}
+
 	if id, err = c.idAlloc.allocateCommonID(); err != nil {
 		goto errHandler
 	}
 	metaNode.ID = id
 	metaNode.NodeSetID = ns.ID
+	log.LogInfof("action[addMetaNode] metanode id[%v] zonename [%v] add meta node to nodesetid[%v]", id, zoneName, ns.ID)
 	if err = c.syncAddMetaNode(metaNode); err != nil {
 		goto errHandler
 	}
@@ -461,6 +502,9 @@ func (c *Cluster) addMetaNode(nodeAddr, zoneName string) (id uint64, err error) 
 		goto errHandler
 	}
 	c.t.putMetaNode(metaNode)
+	// nodeset be avaliable first time can be put into nodesetGrp
+
+	c.addNodeSetGrp(ns, false)
 	c.metaNodes.Store(nodeAddr, metaNode)
 	log.LogInfof("action[addMetaNode],clusterID[%v] metaNodeAddr:%v,nodeSetId[%v],capacity[%v]",
 		c.Name, nodeAddr, ns.ID, ns.Capacity)
@@ -499,6 +543,7 @@ func (c *Cluster) addDataNode(nodeAddr, zoneName string) (id uint64, err error) 
 	}
 	dataNode.ID = id
 	dataNode.NodeSetID = ns.ID
+	log.LogInfof("action[addDataNode] datanode id[%v] zonename [%v] add meta node to nodesetid[%v]", id, zoneName, ns.ID)
 	if err = c.syncAddDataNode(dataNode); err != nil {
 		goto errHandler
 	}
@@ -506,6 +551,10 @@ func (c *Cluster) addDataNode(nodeAddr, zoneName string) (id uint64, err error) 
 		goto errHandler
 	}
 	c.t.putDataNode(dataNode)
+	// nodeset be avaliable first time can be put into nodesetGrp
+
+	c.addNodeSetGrp(ns, false)
+
 	c.dataNodes.Store(nodeAddr, dataNode)
 	log.LogInfof("action[addDataNode],clusterID[%v] dataNodeAddr:%v,nodeSetId[%v],capacity[%v]",
 		c.Name, nodeAddr, ns.ID, ns.Capacity)
@@ -638,31 +687,29 @@ func (c *Cluster) markDeleteVol(name, authKey string) (err error) {
 }
 
 func (c *Cluster) batchCreateDataPartition(vol *Vol, reqCount int) (err error) {
-	var zoneNum int
 	for i := 0; i < reqCount; i++ {
 		if c.DisableAutoAllocate {
 			return
 		}
-		zoneNum = c.decideZoneNum(vol.crossZone)
-		//most of partitions are replicated across 3 zones,but a few partitions are replicated across 2 zones
-		if vol.crossZone && i%5 == 0 {
-			zoneNum = 2
-		}
-		if _, err = c.createDataPartition(vol.Name, zoneNum); err != nil {
+		if _, err = c.createDataPartition(vol.Name); err != nil {
 			log.LogErrorf("action[batchCreateDataPartition] after create [%v] data partition,occurred error,err[%v]", i, err)
 			break
 		}
 	}
 	return
 }
-
+func (c *Cluster) isFaultDomain( vol *Vol) bool{
+	return c.FaultDomain  &&
+		( (!vol.crossZone && c.needFaultDomain) ||
+				(vol.crossZone && (!vol.defaultPriority ||(vol.defaultPriority && c.needFaultDomain))) )
+}
 // Synchronously create a data partition.
 // 1. Choose one of the available data nodes.
 // 2. Assign it a partition ID.
 // 3. Communicate with the data node to synchronously create a data partition.
 // - If succeeded, replicate the data through raft and persist it to RocksDB.
 // - Otherwise, throw errors
-func (c *Cluster) createDataPartition(volName string, zoneNum int) (dp *DataPartition, err error) {
+func (c *Cluster) createDataPartition(volName string) (dp *DataPartition, err error) {
 	var (
 		vol         *Vol
 		partitionID uint64
@@ -677,8 +724,16 @@ func (c *Cluster) createDataPartition(volName string, zoneNum int) (dp *DataPart
 	vol.createDpMutex.Lock()
 	defer vol.createDpMutex.Unlock()
 	errChannel := make(chan error, vol.dpReplicaNum)
-	if targetHosts, targetPeers, err = c.chooseTargetDataNodes("", nil, nil, int(vol.dpReplicaNum), zoneNum, vol.zoneName); err != nil {
-		goto errHandler
+
+	if c.isFaultDomain(vol) {
+		if targetHosts, targetPeers, err = c.getAvaliableHostFromNsGrp(TypeDataPartion, vol.dpReplicaNum); err != nil {
+			goto errHandler
+		}
+	} else {
+		zoneNum := c.decideZoneNum(vol.crossZone)
+		if targetHosts, targetPeers, err = c.chooseTargetDataNodes("", nil, nil, int(vol.dpReplicaNum), zoneNum, vol.zoneName); err != nil {
+			goto errHandler
+		}
 	}
 	if partitionID, err = c.idAlloc.allocateDataPartitionID(); err != nil {
 		goto errHandler
@@ -768,7 +823,6 @@ func (c *Cluster) syncCreateMetaPartitionToMetaNode(host string, mp *MetaPartiti
 	}
 	return
 }
-
 //decideZoneNum
 //if vol is not cross zone, return 1
 //if vol enable cross zone and the zone number of cluster less than defaultReplicaNum return 2
@@ -785,6 +839,7 @@ func (c *Cluster) decideZoneNum(crossZone bool) (zoneNum int) {
 	}
 	return zoneNum
 }
+
 func (c *Cluster) chooseTargetDataNodes(excludeZone string, excludeNodeSets []uint64, excludeHosts []string, replicaNum int, zoneNum int, specifiedZone string) (hosts []string, peers []proto.Peer, err error) {
 
 	var (
@@ -1082,6 +1137,16 @@ func (c *Cluster) decommissionDataPartition(offlineAddr string, dp *DataPartitio
 		goto errHandler
 	}
 	if targetHosts, _, err = ns.getAvailDataNodeHosts(dp.Hosts, 1); err != nil {
+		if _, ok := c.vols[dp.VolName]; !ok {
+			log.LogWarnf("clusterID[%v] partitionID:%v  on Node:%v offline failed,PersistenceHosts:[%v]",
+				c.Name, dp.PartitionID, offlineAddr, dp.Hosts)
+			return
+		}
+		if c.isFaultDomain(c.vols[dp.VolName]) {
+			log.LogErrorf("clusterID[%v] partitionID:%v  on Node:%v is banlance zone,PersistenceHosts:[%v]",
+				c.Name, dp.PartitionID, offlineAddr, dp.Hosts)
+			return
+		}
 		// select data nodes from the other node set in same zone
 		excludeNodeSets = append(excludeNodeSets, ns.ID)
 		if targetHosts, _, err = zone.getAvailDataNodeHosts(excludeNodeSets, dp.Hosts, 1); err != nil {
@@ -1579,7 +1644,9 @@ errHandler:
 
 // Create a new volume.
 // By default we create 3 meta partitions and 10 data partitions during initialization.
-func (c *Cluster) createVol(name, owner, zoneName, description string, mpCount, dpReplicaNum, size, capacity int, followerRead, authenticate, crossZone bool) (vol *Vol, err error) {
+func (c *Cluster) createVol(name, owner, zoneName, description string,
+			mpCount, dpReplicaNum, size, capacity int,
+			followerRead, authenticate, crossZone, defaultPriority bool) (vol *Vol, err error) {
 	var (
 		dataPartitionSize       uint64
 		readWriteDataPartitions int
@@ -1603,7 +1670,10 @@ func (c *Cluster) createVol(name, owner, zoneName, description string, mpCount, 
 	} else if !crossZone {
 		zoneName = DefaultZoneName
 	}
-	if vol, err = c.doCreateVol(name, owner, zoneName, description, dataPartitionSize, uint64(capacity), dpReplicaNum, followerRead, authenticate, crossZone); err != nil {
+	if vol, err = c.doCreateVol(name, owner, zoneName, description,
+						dataPartitionSize, uint64(capacity), dpReplicaNum,
+						followerRead, authenticate, crossZone,
+						defaultPriority); err != nil {
 		goto errHandler
 	}
 	if err = vol.initMetaPartitions(c, mpCount); err != nil {
@@ -1631,7 +1701,10 @@ errHandler:
 	return
 }
 
-func (c *Cluster) doCreateVol(name, owner, zoneName, description string, dpSize, capacity uint64, dpReplicaNum int, followerRead, authenticate, crossZone bool) (vol *Vol, err error) {
+func (c *Cluster) doCreateVol(name, owner, zoneName, description string,
+						dpSize, capacity uint64, dpReplicaNum int,
+						followerRead, authenticate, crossZone,
+						defaultPriority bool) (vol *Vol, err error) {
 	var id uint64
 	c.createVolMutex.Lock()
 	defer c.createVolMutex.Unlock()
@@ -1644,7 +1717,10 @@ func (c *Cluster) doCreateVol(name, owner, zoneName, description string, dpSize,
 	if err != nil {
 		goto errHandler
 	}
-	vol = newVol(id, name, owner, zoneName, dpSize, capacity, uint8(dpReplicaNum), defaultReplicaNum, followerRead, authenticate, crossZone, createTime, description)
+	vol = newVol(id, name, owner, zoneName, dpSize,
+			capacity, uint8(dpReplicaNum), defaultReplicaNum,
+			followerRead, authenticate, crossZone,
+			defaultPriority, createTime, description)
 	// refresh oss secure
 	vol.refreshOSSSecure()
 	if err = c.syncAddVol(vol); err != nil {
@@ -1693,7 +1769,11 @@ func (c *Cluster) updateInodeIDRange(volName string, start uint64) (err error) {
 }
 
 // Choose the target hosts from the available zones and meta nodes.
-func (c *Cluster) chooseTargetMetaHosts(excludeZone string, excludeNodeSets []uint64, excludeHosts []string, replicaNum int, crossZone bool, specifiedZone string) (hosts []string, peers []proto.Peer, err error) {
+func (c *Cluster) chooseTargetMetaHosts(
+			excludeZone string, excludeNodeSets []uint64,
+			excludeHosts []string, replicaNum int,
+			crossZone bool,
+			specifiedZone string) (hosts []string, peers []proto.Peer, err error) {
 	var (
 		zones      []*Zone
 		masterZone *Zone
@@ -1702,37 +1782,26 @@ func (c *Cluster) chooseTargetMetaHosts(excludeZone string, excludeNodeSets []ui
 	if excludeZone != "" {
 		excludeZones = append(excludeZones, excludeZone)
 	}
-	zoneNum := c.decideZoneNum(crossZone)
-	if replicaNum < zoneNum {
-		zoneNum = replicaNum
-	}
+
 	// when creating vol,user specified a zone,we reset zoneNum to 1,to be created partition with specified zone,
 	//if specified zone is not writable,we choose a zone randomly
 	if specifiedZone != "" {
-		zoneNum = 1
-		zone, err := c.t.getZone(specifiedZone)
+		var zone *Zone
+		zone, err = c.t.getZone(specifiedZone)
 		if err != nil {
 			Warn(c.Name, fmt.Sprintf("cluster[%v],specified zone[%v]is not writable", c.Name, specifiedZone))
+			return nil, nil, err
 		} else {
-			zones = make([]*Zone, 0)
-			zones = append(zones, zone)
-		}
-	}
-	if zones == nil || specifiedZone == "" {
-		if zones, err = c.t.allocZonesForMetaNode(zoneNum, replicaNum, excludeZones); err != nil {
+			if hosts, peers, err = zone.getAvailMetaNodeHosts(excludeNodeSets, excludeHosts, replicaNum); err != nil {
+				log.LogErrorf("action[chooseTargetMetaNodes],err[%v]", err)
+				return nil, nil, err
+			}
+			log.LogInfof("action[chooseTargetMetaHosts] replicanum[%v] zonelen[%v] hosts[%v] peers[%v]", replicaNum, len(zones), hosts, peers)
 			return
 		}
 	}
-
-	if crossZone && len(zones) < 2 {
-		log.LogWarn(fmt.Sprintf("action[chooseTargetMetaNodes] ,no enough zones [%v] to be selected, expect select [%v] zones", len(zones), zoneNum))
-		return nil, nil, fmt.Errorf("action[chooseTargetMetaNodes] no enough zones [%v] to be selected, expect select [%v] zones", len(zones), zoneNum)
-	}
-	if len(zones) == 1 {
-		if hosts, peers, err = zones[0].getAvailMetaNodeHosts(excludeNodeSets, excludeHosts, replicaNum); err != nil {
-			log.LogErrorf("action[chooseTargetMetaNodes],err[%v]", err)
-			return
-		}
+	zoneNum:= c.decideZoneNum(crossZone)
+	if zones, err = c.t.allocZonesForMetaNode(zoneNum, replicaNum, excludeZones); err != nil {
 		return
 	}
 	hosts = make([]string, 0)
@@ -1740,49 +1809,50 @@ func (c *Cluster) chooseTargetMetaHosts(excludeZone string, excludeNodeSets []ui
 	if excludeHosts == nil {
 		excludeHosts = make([]string, 0)
 	}
+	log.LogInfof("action[chooseTargetMetaHosts] replicanum[%v] zonelen[%v]", replicaNum, len(zones))
 	//replicaNum is equal with the number of allocated zones
 	if replicaNum == len(zones) {
 		for _, zone := range zones {
 			selectedHosts, selectedPeers, e := zone.getAvailMetaNodeHosts(excludeNodeSets, excludeHosts, 1)
 			if e != nil {
+				log.LogInfof("action[chooseTargetMetaHosts] replicanum[%v] zonelen[%v]", replicaNum, len(zones))
 				return nil, nil, errors.NewError(e)
 			}
 			hosts = append(hosts, selectedHosts...)
 			peers = append(peers, selectedPeers...)
 		}
-		goto result
-	}
-
-	// replicaNum larger than with the number of allocated zones
-	for _, zone := range zones {
-		if zone.name != c.lastMasterZoneForMetaNode {
-			masterZone = zone
-			c.lastMasterZoneForMetaNode = zone.name
-			break
+	} else {
+		// replicaNum larger than with the number of allocated zones
+		for _, zone := range zones {
+			if zone.name != c.lastMasterZoneForMetaNode {
+				masterZone = zone
+				c.lastMasterZoneForMetaNode = zone.name
+				break
+			}
+		}
+		if masterZone == nil {
+			masterZone = zones[0]
+		}
+		for _, zone := range zones {
+			if zone.name == masterZone.name {
+				rNum := replicaNum - len(zones) + 1
+				selectedHosts, selectedPeers, e := zone.getAvailMetaNodeHosts(excludeNodeSets, excludeHosts, rNum)
+				if e != nil {
+					log.LogInfof("action[chooseTargetMetaHosts] replicanum[%v] zonelen[%v]", replicaNum, len(zones))
+					return nil, nil, errors.NewError(e)
+				}
+				hosts = append(hosts, selectedHosts...)
+				peers = append(peers, selectedPeers...)
+			} else {
+				selectedHosts, selectedPeers, e := zone.getAvailMetaNodeHosts(excludeNodeSets, excludeHosts, 1)
+				if e != nil {
+					return nil, nil, errors.NewError(e)
+				}
+				hosts = append(hosts, selectedHosts...)
+				peers = append(peers, selectedPeers...)
+			}
 		}
 	}
-	if masterZone == nil {
-		masterZone = zones[0]
-	}
-	for _, zone := range zones {
-		if zone.name == masterZone.name {
-			rNum := replicaNum - len(zones) + 1
-			selectedHosts, selectedPeers, e := zone.getAvailMetaNodeHosts(excludeNodeSets, excludeHosts, rNum)
-			if e != nil {
-				return nil, nil, errors.NewError(e)
-			}
-			hosts = append(hosts, selectedHosts...)
-			peers = append(peers, selectedPeers...)
-		} else {
-			selectedHosts, selectedPeers, e := zone.getAvailMetaNodeHosts(excludeNodeSets, excludeHosts, 1)
-			if e != nil {
-				return nil, nil, errors.NewError(e)
-			}
-			hosts = append(hosts, selectedHosts...)
-			peers = append(peers, selectedPeers...)
-		}
-	}
-result:
 	log.LogInfof("action[chooseTargetMetaHosts] replicaNum[%v],zoneNum[%v],selectedZones[%v],hosts[%v]", replicaNum, zoneNum, len(zones), hosts)
 	if len(hosts) != replicaNum {
 		return nil, nil, errors.Trace(proto.ErrNoMetaNodeToCreateMetaPartition, "hosts len[%v],replicaNum[%v]", len(hosts), replicaNum)

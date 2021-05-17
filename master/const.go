@@ -43,6 +43,7 @@ const (
 	keywordsKey             = "keywords"
 	zoneNameKey             = "zoneName"
 	crossZoneKey            = "crossZone"
+	defaultPriority         = "defaultPriority"
 	userKey                 = "user"
 	nodeHostsKey            = "hosts"
 	nodeDeleteBatchCountKey = "batchCount"
@@ -52,6 +53,7 @@ const (
 	descriptionKey          = "description"
 	dpSelectorNameKey       = "dpSelectorName"
 	dpSelectorParmKey       = "dpSelectorParm"
+	nodeTypeKey             = "nodeType"
 )
 
 const (
@@ -73,6 +75,7 @@ const (
 )
 
 const (
+	defaultFaultDomainZoneCnt                    = 3
 	defaultInitMetaPartitionCount                = 3
 	defaultMaxInitMetaPartitionCount             = 100
 	defaultMaxMetaPartitionInodeID        uint64 = 1<<63 - 1
@@ -93,6 +96,7 @@ const (
 	retrySendSyncTaskInternal                    = 3 * time.Second
 	defaultRangeOfCountDifferencesAllowed        = 50
 	defaultMinusOfMaxInodeID                     = 1000
+	defaultNodeSetGrpBatchCnt                    = 3
 )
 
 const (
@@ -100,7 +104,12 @@ const (
 	markDelete      uint8 = 1
 	normalZone            = 0
 	unavailableZone       = 1
+	unavaliable           = 1
+	metaNodesUnavaliable   = 2
+	dataNodesUnavaliable   = 3
 )
+
+
 
 const (
 	opSyncAddMetaNode          uint32 = 0x01
@@ -133,6 +142,9 @@ const (
 	opSyncAddVolUser           uint32 = 0x1C
 	opSyncDeleteVolUser        uint32 = 0x1D
 	opSyncUpdateVolUser        uint32 = 0x1E
+	opSyncNodeSetGrp           uint32 = 0x1F
+
+	opSyncExclueDomain           uint32 = 0x23
 )
 
 const (
@@ -145,6 +157,8 @@ const (
 	volAcronym            = "vol"
 	clusterAcronym        = "c"
 	nodeSetAcronym        = "s"
+	nodeSetGrpAcronym     = "g"
+	excludeDomainAcronym     = "zoneExclude"
 	maxDataPartitionIDKey = keySeparator + "max_dp_id"
 	maxMetaPartitionIDKey = keySeparator + "max_mp_id"
 	maxCommonIDKey        = keySeparator + "max_common_id"
@@ -155,7 +169,8 @@ const (
 	metaPartitionPrefix   = keySeparator + metaPartitionAcronym + keySeparator
 	clusterPrefix         = keySeparator + clusterAcronym + keySeparator
 	nodeSetPrefix         = keySeparator + nodeSetAcronym + keySeparator
-
+	nodeSetGrpPrefix      = keySeparator + nodeSetGrpAcronym + keySeparator
+	ExcludeDomainPrefix   = keySeparator + excludeDomainAcronym + keySeparator
 	akAcronym      = "ak"
 	userAcronym    = "user"
 	volUserAcronym = "voluser"

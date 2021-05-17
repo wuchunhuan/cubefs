@@ -15,6 +15,7 @@
 package master
 
 import (
+	"github.com/chubaofs/chubaofs/util/log"
 	"math/rand"
 	"sync"
 	"time"
@@ -59,6 +60,8 @@ func newDataNode(addr, zoneName, clusterID string) (dataNode *DataNode) {
 func (dataNode *DataNode) checkLiveness() {
 	dataNode.Lock()
 	defer dataNode.Unlock()
+	log.LogInfof("action[checkLiveness] datanode[%v] report time[%v],since report time[%v], need gap [%v]",
+		dataNode.Addr, dataNode.ReportTime, time.Since(dataNode.ReportTime), time.Second*time.Duration(defaultNodeTimeOutSec))
 	if time.Since(dataNode.ReportTime) > time.Second*time.Duration(defaultNodeTimeOutSec) {
 		dataNode.isActive = false
 	}
@@ -96,6 +99,8 @@ func (dataNode *DataNode) updateNodeMetric(resp *proto.DataNodeHeartbeatResponse
 	}
 	dataNode.ReportTime = time.Now()
 	dataNode.isActive = true
+
+
 }
 
 func (dataNode *DataNode) isWriteAble() (ok bool) {

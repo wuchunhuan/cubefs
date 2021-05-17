@@ -39,7 +39,10 @@ const (
 	AdminListVols                  = "/vol/list"
 	AdminSetNodeInfo               = "/admin/setNodeInfo"
 	AdminGetNodeInfo               = "/admin/getNodeInfo"
-
+	AdminGetAllNodeSetGrpInfo      = "/admin/getNodeAllSetGrpInfo"
+	AdminGetNodeSetGrpInfo         = "/admin/getNodeSetGrpInfo"
+	AdminUpdateNodeSetCapcity      = "/admin/updateNodeSetCapcity"
+	AdminUpdateNodeSetId           = "/admin/updateNodeSetId"
 	//graphql master api
 	AdminClusterAPI = "/api/cluster"
 	AdminUserAPI    = "/api/user"
@@ -480,8 +483,28 @@ type SimpleVolView struct {
 	Description        string
 	DpSelectorName     string
 	DpSelectorParm     string
+	DefaultZonePrior   bool
+}
+type SimpleNodeSet struct {
+	ID        uint64
+	ZoneName  string
+	Capacity  int
+	MetaUsed  uint64
+	MetaTotal uint64
+	MetaNodes []NodeView
+	DataUsed  uint64
+	DataTotal uint64
+	DataNodes []NodeView
+}
+type SimpleNodeSetGrpInfo struct {
+	ID        uint64
+	Status    uint8
+	NodeSetInfo []SimpleNodeSet
 }
 
+type SimpleNodeSetGrpInfoList struct {
+	SimpleNodeSetGrpInfo []*SimpleNodeSetGrpInfo
+}
 // MasterAPIAccessResp defines the response for getting meta partition
 type MasterAPIAccessResp struct {
 	APIResp APIAccessResp `json:"api_resp"`
