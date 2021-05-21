@@ -963,7 +963,7 @@ func (m *Server) updateDataUseRatio(ratio float64) (err error) {
 	m.cluster.nodeSetGrpManager.Lock()
 	defer m.cluster.nodeSetGrpManager.Unlock()
 
-	m.cluster.nodeSetGrpManager.dataRatio = ratio
+	m.cluster.nodeSetGrpManager.dataRatioLimit = ratio
 	err = m.cluster.putZoneDomain()
 	return
 }
@@ -1118,12 +1118,19 @@ func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
 			node := value.(*DataNode)
 			nsStat.DataTotal += node.Total
 			nsStat.DataUsed += node.Used
+			if node.isWriteAble() {
+				nsStat.DataUsed += node.Used
+			} else {
+				nsStat.DataUsed += node.Total
+			}
 			log.LogInfof("nodeset index[%v], datanode nodeset id[%v],zonename[%v], addr[%v] inner nodesetid[%v]",
 				i, nsStat.ID, node.ZoneName, node.Addr, node.NodeSetID)
 			nsStat.DataNodes = append(nsStat.DataNodes, proto.NodeView{ID: node.ID, Addr: node.Addr,
 				Status: node.isActive, IsWritable: node.isWriteAble()})
 			return true
 		})
+		nsStat.DataUseRatio = float64(nsStat.DataUsed) / float64(nsStat.DataTotal)
+
 		nsg.nodeSets[i].metaNodes.Range(func(key, value interface{}) bool {
 			node := value.(*MetaNode)
 			nsStat.MetaTotal += node.Total
@@ -1134,7 +1141,7 @@ func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
 									Status: node.IsActive, IsWritable: node.isWritable()})
 			return true
 		})
-
+		nsStat.MetaUseRatio = float64(nsStat.MetaUsed) / float64(nsStat.MetaTotal)
 		nsgStat.NodeSetInfo = append(nsgStat.NodeSetInfo, nsStat)
 		log.LogInfof("nodeset index[%v], nodeset id[%v],capacity[%v], datatotal[%v] dataused[%v] metatotal[%v] metaused[%v], metanode[%v], datanodes[%v]",
 				i, nsStat.ID, nsStat.Capacity, nsStat.DataTotal, nsStat.DataUsed, nsStat.MetaTotal, nsStat.MetaUsed, nsStat.MetaNodes, nsStat.DataNodes)
@@ -1248,9 +1255,9 @@ func (m *Server) getAllNodeSetGrpInfoHandler(w http.ResponseWriter, r *http.Requ
 	nsglStat := new(proto.SimpleNodeSetGrpInfoList)
 	nsglStat.DomainOn = m.cluster.FaultDomain
 	nsglStat.NeedDomain = m.cluster.needFaultDomain
-	nsglStat.DataRatio = nsgm.dataRatio
+	nsglStat.DataRatioLimit = nsgm.dataRatioLimit
 	nsglStat.Status = nsgm.status
-
+	nsglStat.ExcludeZones = nsgm.c.t.domainExcludeZones
 	for i = 0; i < len(nsgm.nodeSetGrpMap) ; i++ {
 		log.LogInfof("action[getAllNodeSetGrpInfoHandler] index [%v],id [%v],Print inner nodeset now!", i, nsgm.nodeSetGrpMap[i].ID)
 		nsglStat.SimpleNodeSetGrpInfo = append(nsglStat.SimpleNodeSetGrpInfo, m.buildNodeSetGrpInfo(i))

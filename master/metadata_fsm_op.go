@@ -624,8 +624,8 @@ func (c *Cluster) putZoneDomain() (err error) {
 	domainValue := newZoneDomainValue()
 	domainValue.ExcludeZoneMap = c.nodeSetGrpManager.excludeZoneListDomain
 	domainValue.NeedFaultDomain = c.needFaultDomain
-	if c.nodeSetGrpManager.dataRatio > 0 {
-		domainValue.DataRatio = c.nodeSetGrpManager.dataRatio
+	if c.nodeSetGrpManager.dataRatioLimit > 0 {
+		domainValue.DataRatio = c.nodeSetGrpManager.dataRatioLimit
 	} else {
 		domainValue.DataRatio = defaultDataPartitionUsageThreshold
 	}
@@ -660,7 +660,7 @@ func (c *Cluster) loadZoneDomain() (ok bool, err error) {
 			c.t.domainExcludeZones = append(c.t.domainExcludeZones, zoneName)
 		}
 		c.needFaultDomain = nsv.NeedFaultDomain
-		c.nodeSetGrpManager.dataRatio = nsv.DataRatio
+		c.nodeSetGrpManager.dataRatioLimit = nsv.DataRatio
 		break
 	}
 	log.LogInfof("action[loadZoneDomain] success!")

@@ -490,6 +490,8 @@ type SimpleNodeSet struct {
 	ID        uint64
 	ZoneName  string
 	Capacity  int
+	DataUseRatio float64
+	MetaUseRatio float64
 	MetaUsed  uint64
 	MetaTotal uint64
 	MetaNodes []NodeView
@@ -505,9 +507,10 @@ type SimpleNodeSetGrpInfo struct {
 
 type SimpleNodeSetGrpInfoList struct {
 	DomainOn             bool
-	DataRatio            float64
+	DataRatioLimit       float64
 	NeedDomain           bool
 	Status               uint8
+	ExcludeZones         []string
 	SimpleNodeSetGrpInfo []*SimpleNodeSetGrpInfo
 }
 // MasterAPIAccessResp defines the response for getting meta partition

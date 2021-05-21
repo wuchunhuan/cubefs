@@ -178,7 +178,7 @@ func (c *Cluster) scheduleToCheckNodeSetGrpManagerStatus() {
 	go func() {
 		for {
 			if c.FaultDomain == false || !c.partition.IsRaftLeader() {
-				time.Sleep(5 * time.Minute)
+				time.Sleep(time.Minute)
 				continue
 			}
 			c.nodeSetGrpManager.checkGrpState()
@@ -722,8 +722,17 @@ func (c *Cluster) batchCreateDataPartition(vol *Vol, reqCount int) (err error) {
 func (c *Cluster) isFaultDomain( vol *Vol) bool{
 	log.LogInfof("action[isFaultDomain] vol [%v] zoname [%v] FaultDomain[%v] need fault domain[%v] vol crosszone[%v] default[%v]",
 		vol.Name, vol.zoneName, c.FaultDomain,c.needFaultDomain,vol.crossZone, vol.defaultPriority)
+	var specifyZoneNeedDomain bool
+	if c.FaultDomain && !vol.crossZone && !c.needFaultDomain {
+		if value, ok := c.t.zoneMap.Load(vol.zoneName); ok{
+			if value.(*Zone).status == unavailableZone {
+				specifyZoneNeedDomain = true
+			}
+		}
+	}
+
 	return c.FaultDomain  &&
-		((!vol.crossZone && c.needFaultDomain) ||
+		((!vol.crossZone && c.needFaultDomain) || specifyZoneNeedDomain ||
 				(vol.crossZone && (!vol.defaultPriority ||
 										(vol.defaultPriority && (c.needFaultDomain || len(c.t.domainExcludeZones) <= 1)))))
 }
@@ -1680,19 +1689,20 @@ func (c *Cluster) checkVolInfo(name string, crossZone bool, zoneName string) (er
 				zoneName = DefaultZoneName
 			}
 		} else {
-			var isExcludeZone bool
-			// zonename should be in old zones and be excluded from domain
-			for i := 0; i < len(c.t.domainExcludeZones); i++ {
-				if zoneName == c.t.domainExcludeZones[i] {
-					isExcludeZone = true
-					break
+			if c.FaultDomain {
+				var isExcludeZone bool
+				// zonename should be in old zones and be excluded from domain
+				for i := 0; i < len(c.t.domainExcludeZones); i++ {
+					if zoneName == c.t.domainExcludeZones[i] {
+						isExcludeZone = true
+						break
+					}
+				}
+				if !isExcludeZone {
+					return fmt.Errorf("action[checkVolInfo] the zonename[%v] not execluded domain name.should not be assigned")
 				}
 			}
-			if !isExcludeZone {
-				return fmt.Errorf("action[checkVolInfo] the zonename[%v] not execluded domain name.should not be assigned")
-			}
 		}
-		log.LogInfof("action[checkVolInfo] vol [%v] zonename be unseted", name)
 	}
 	return
 }
@@ -1737,6 +1747,10 @@ func (c *Cluster) createVol(name, owner, zoneName, description string,
 	for retryCount := 0; readWriteDataPartitions < defaultInitDataPartitionCnt && retryCount < 3; retryCount++ {
 		_ = vol.initDataPartitions(c)
 		readWriteDataPartitions = len(vol.dataPartitions.partitionMap)
+	}
+	if len(vol.dataPartitions.partitionMap) <= defaultReplicaNum {
+		err = fmt.Errorf("action[createVol]  initDataPartitions failed")
+		goto errHandler
 	}
 	vol.dataPartitions.readableAndWritableCnt = readWriteDataPartitions
 	vol.updateViewCache(c)

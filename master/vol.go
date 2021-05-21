@@ -412,7 +412,7 @@ func (vol *Vol) autoCreateDataPartitions(c *Cluster) {
 		vol.dataPartitions.lastAutoCreateTime = time.Now()
 		return
 	}
-	if time.Since(vol.dataPartitions.lastAutoCreateTime) < 2 * time.Minute {
+	if time.Since(vol.dataPartitions.lastAutoCreateTime) < time.Minute {
 		return
 	}
 

@@ -209,7 +209,7 @@ type nodeSetGrpManager struct {
 	lastBuildIndex        int            // build index for 2 plus 1 policy,multi zones need banlance build
 	status                uint8          // all nodesetGrp may be unavaliable or no nodesetGrp be exist on given policy
 	nsIdMap               map[uint64]int // store all ns alreay be put into manager
-	dataRatio             float64
+	dataRatioLimit        float64
 	sync.RWMutex
 }
 
@@ -222,7 +222,7 @@ func newNodeSetGrpManager(cls *Cluster) *nodeSetGrpManager {
 		nsId2NsGrpMap:         make(map[uint64]int),
 		excludeZoneListDomain: make(map[string]int),
 		nsIdMap:               make(map[uint64]int),
-		dataRatio:             defaultDataPartitionUsageThreshold,
+		dataRatioLimit:        defaultDataPartitionUsageThreshold,
 	}
 	return ns
 }
@@ -237,25 +237,42 @@ func (nsgm *nodeSetGrpManager) checkExcludeZoneState() {
 		log.LogInfof("action[checkExcludeZoneState] no exclueZoneList for Domain,size zero")
 		return
 	}
-	var metaNeedDomain = true
-	var dataNeedDomain = true
+	var (
+		metaNeedDomain = true
+		dataNeedDomain = true
+	)
 	log.LogInfof("action[checkExcludeZoneState] exclueZoneList size[%v]", len(nsgm.excludeZoneListDomain))
 	for zoneNm := range nsgm.excludeZoneListDomain {
 		if value, ok := nsgm.c.t.zoneMap.Load(zoneNm); ok {
 			zone := value.(*Zone)
 			log.LogInfof("action[checkExcludeZoneState] zone name[%v],status[%v], index for datanode[%v],index for metanode[%v]",
 				zone.name, zone.status, zone.setIndexForDataNode, zone.setIndexForMetaNode)
-			if zone.status == normalZone {
-				for nsId := range zone.nodeSetMap {
-					if dataNeedDomain && zone.nodeSetMap[nsId].canWriteForDataNode(defaultFaultDomainZoneCnt) {
-						log.LogInfof("action[checkExcludeZoneState] nodesetid[%v] DataNode canWriteForDataNode", nsId)
-						dataNeedDomain = false
-					}
-					if metaNeedDomain && zone.nodeSetMap[nsId].canWriteForMetaNode(defaultFaultDomainZoneCnt) {
-						log.LogInfof("action[checkExcludeZoneState] nodesetid[%v] MetaNode canWriteForMetaNode", nsId)
-						metaNeedDomain = false
-					}
+			var (
+				zoneDataNeedDomain = true
+				zoneMetaNeedDomain = true
+			)
+			for nsId := range zone.nodeSetMap {
+				if dataNeedDomain && zone.nodeSetMap[nsId].canWriteForDataNode(defaultFaultDomainZoneCnt) {
+					log.LogInfof("action[checkExcludeZoneState] nodesetid[%v] DataNode canWriteForDataNode", nsId)
+					dataNeedDomain = false
+					zoneDataNeedDomain = false
 				}
+				if metaNeedDomain && zone.nodeSetMap[nsId].canWriteForMetaNode(defaultFaultDomainZoneCnt) {
+					log.LogInfof("action[checkExcludeZoneState] nodesetid[%v] MetaNode canWriteForMetaNode", nsId)
+					metaNeedDomain = false
+					zoneMetaNeedDomain = false
+				}
+			}
+			if zoneDataNeedDomain || zoneMetaNeedDomain {
+				if zone.status == normalZone {
+					log.LogInfof("action[checkExcludeZoneState] zone[%v] be set unavailableZone", zone.name)
+				}
+				zone.status = unavailableZone
+			} else {
+				if zone.status == unavailableZone {
+					log.LogInfof("action[checkExcludeZoneState] zone[%v] be set normalZone", zone.name)
+				}
+				zone.status = normalZone
 			}
 		}
 	}
@@ -307,8 +324,8 @@ func (nsgm *nodeSetGrpManager) checkGrpState() {
 				return true
 			})
 
-			if float64(used) / float64(total) <  nsgm.dataRatio {
-				log.LogInfof("action[checkGrpState] nodeset id [%v] zonename[%v] is fine. used [%v] total [%v] UsageRatio [%v] got avaliable metanode",
+			if float64(used) / float64(total) <  nsgm.dataRatioLimit {
+				log.LogInfof("action[checkGrpState] nodeset id [%v] zonename[%v] is fine. used [%v] total [%v] UsageRatio [%v] got avaliable datanode",
 					nsgm.nodeSetGrpMap[i].nodeSets[j].ID, nsgm.nodeSetGrpMap[i].nodeSets[j].zoneName, used, total, float64(used) / float64(total))
 				dataWorked = true
 			}
@@ -896,9 +913,11 @@ func (t *topology) isSingleZone() bool {
 func (t *topology) getDomainExcludeZones() (zones []*Zone) {
 	t.zoneLock.RLock()
 	defer t.zoneLock.RUnlock()
+	zones = make([]*Zone, 0)
 	for i:= 0; i < len(t.domainExcludeZones); i++ {
 		if value, ok := t.zoneMap.Load(t.domainExcludeZones[i]); ok {
 			zones = append(zones, value.(*Zone))
+			log.LogInfo("action[getDomainExcludeZones] append zone name:[%v]_[%v]", t.domainExcludeZones[i], value.(*Zone).name)
 		}
 	}
 	return
