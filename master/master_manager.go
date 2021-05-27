@@ -120,7 +120,7 @@ func (m *Server) loadMetadata() {
 	if m.cluster.FaultDomain {
 		log.LogInfof("action[FaultDomain] set")
 		if !loadDomain { //first restart after domain item be added
-			if err = m.cluster.putZoneDomain(); err != nil {
+			if err = m.cluster.putZoneDomain(true); err != nil {
 				log.LogInfof("action[putZoneDomain] err[%v]", err)
 				panic(err)
 			}

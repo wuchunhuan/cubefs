@@ -608,18 +608,19 @@ func (c *Cluster) loadNodeSets() (err error) {
 	return nil
 }
 // put exclude zone only be used one time when master update and restart
-func (c *Cluster) putZoneDomain() (err error) {
+func (c *Cluster) putZoneDomain(init bool) (err error) {
 	log.LogInfof("action[putZoneDomain]")
 	metadata := new(RaftCmd)
 	metadata.Op = opSyncExclueDomain
 	metadata.K = DomainPrefix
-
-	for i := 0; i < len(c.t.zones); i++ {
-		c.nodeSetGrpManager.excludeZoneListDomain[c.t.zones[i].name] = 0
-		c.t.domainExcludeZones = append(c.t.domainExcludeZones, c.t.zones[i].name)
-	}
-	if len(c.t.zones) == 0 {
-		c.needFaultDomain = true
+	if init {
+		for i := 0; i < len(c.t.zones); i++ {
+			c.nodeSetGrpManager.excludeZoneListDomain[c.t.zones[i].name] = 0
+			c.t.domainExcludeZones = append(c.t.domainExcludeZones, c.t.zones[i].name)
+		}
+		if len(c.t.zones) == 0 {
+			c.needFaultDomain = true
+		}
 	}
 	domainValue := newZoneDomainValue()
 	domainValue.ExcludeZoneMap = c.nodeSetGrpManager.excludeZoneListDomain

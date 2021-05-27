@@ -964,7 +964,7 @@ func (m *Server) updateDataUseRatio(ratio float64) (err error) {
 	defer m.cluster.nodeSetGrpManager.Unlock()
 
 	m.cluster.nodeSetGrpManager.dataRatioLimit = ratio
-	err = m.cluster.putZoneDomain()
+	err = m.cluster.putZoneDomain(false)
 	return
 }
 func (m *Server) updateNodesetId(zoneName string, destNodesetId uint64, nodeType uint64, addr string) (err error) {
@@ -1129,7 +1129,7 @@ func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
 				Status: node.isActive, IsWritable: node.isWriteAble()})
 			return true
 		})
-		nsStat.DataUseRatio = float64(nsStat.DataUsed) / float64(nsStat.DataTotal)
+		nsStat.DataUseRatio , _ = strconv.ParseFloat(fmt.Sprintf("%.2f", float64(nsStat.DataUsed) / float64(nsStat.DataTotal)), 64)
 
 		nsg.nodeSets[i].metaNodes.Range(func(key, value interface{}) bool {
 			node := value.(*MetaNode)
@@ -1141,7 +1141,7 @@ func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
 									Status: node.IsActive, IsWritable: node.isWritable()})
 			return true
 		})
-		nsStat.MetaUseRatio = float64(nsStat.MetaUsed) / float64(nsStat.MetaTotal)
+		nsStat.MetaUseRatio, _ = strconv.ParseFloat(fmt.Sprintf("%.2f", float64(nsStat.MetaUsed) / float64(nsStat.MetaTotal)), 64)
 		nsgStat.NodeSetInfo = append(nsgStat.NodeSetInfo, nsStat)
 		log.LogInfof("nodeset index[%v], nodeset id[%v],capacity[%v], datatotal[%v] dataused[%v] metatotal[%v] metaused[%v], metanode[%v], datanodes[%v]",
 				i, nsStat.ID, nsStat.Capacity, nsStat.DataTotal, nsStat.DataUsed, nsStat.MetaTotal, nsStat.MetaUsed, nsStat.MetaNodes, nsStat.DataNodes)
@@ -1178,7 +1178,7 @@ func (m *Server) updateDataUseRatioHandler(w http.ResponseWriter, r *http.Reques
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 	}
 
-	if  err:= m.updateDataUseRatio(ratioVal); err == nil {
+	if  err = m.updateDataUseRatio(ratioVal); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 	}
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))

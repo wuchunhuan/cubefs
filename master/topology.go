@@ -18,6 +18,7 @@ import (
 	"container/list"
 	"fmt"
 	"github.com/chubaofs/chubaofs/proto"
+	"github.com/chubaofs/chubaofs/util"
 	"github.com/chubaofs/chubaofs/util/errors"
 	"github.com/chubaofs/chubaofs/util/log"
 	"sort"
@@ -251,18 +252,18 @@ func (nsgm *nodeSetGrpManager) checkExcludeZoneState() {
 				zoneDataNeedDomain = true
 				zoneMetaNeedDomain = true
 			)
-			for nsId := range zone.nodeSetMap {
-				if dataNeedDomain && zone.nodeSetMap[nsId].canWriteForDataNode(defaultFaultDomainZoneCnt) {
-					log.LogInfof("action[checkExcludeZoneState] nodesetid[%v] DataNode canWriteForDataNode", nsId)
-					dataNeedDomain = false
-					zoneDataNeedDomain = false
-				}
-				if metaNeedDomain && zone.nodeSetMap[nsId].canWriteForMetaNode(defaultFaultDomainZoneCnt) {
-					log.LogInfof("action[checkExcludeZoneState] nodesetid[%v] MetaNode canWriteForMetaNode", nsId)
-					metaNeedDomain = false
-					zoneMetaNeedDomain = false
-				}
+
+			if zone.canWriteForDataNode(defaultFaultDomainZoneCnt) {
+				log.LogInfof("action[checkExcludeZoneState] zone[%v]  canWriteForDataNode", zone.name)
+				dataNeedDomain = false
+				zoneDataNeedDomain = false
 			}
+			if zone.canWriteForMetaNode(defaultFaultDomainZoneCnt) {
+				log.LogInfof("action[checkExcludeZoneState] zone[%v]  canWriteForMetaNode", zone.name)
+				metaNeedDomain = false
+				zoneMetaNeedDomain = false
+			}
+
 			if zoneDataNeedDomain || zoneMetaNeedDomain {
 				if zone.status == normalZone {
 					log.LogInfof("action[checkExcludeZoneState] zone[%v] be set unavailableZone", zone.name)
@@ -440,7 +441,7 @@ func (nsgm *nodeSetGrpManager) getHostFromNodeSetGrpSpecific(replicaNum uint8, c
 			hosts []string,
 			peers []proto.Peer,
 			err error){
-	log.LogInfof("action[getHostFromNodeSetGrpSpecfic]  replicaNum[%v],type[%v], nsg cnt[%v], nsg status[%v]",
+	log.LogErrorf("action[getHostFromNodeSetGrpSpecfic]  replicaNum[%v],type[%v], nsg cnt[%v], nsg status[%v]",
 		replicaNum, createType, len(nsgm.nodeSetGrpMap), nsgm.status)
 	if len(nsgm.nodeSetGrpMap) == 0 {
 		return
@@ -473,7 +474,7 @@ func (nsgm *nodeSetGrpManager) getHostFromNodeSetGrpSpecific(replicaNum uint8, c
 			for i := 0; i < defaultFaultDomainZoneCnt; i++ {
 				ns := nsg.nodeSets[nsg.nsgInnerIndex]
 				nsg.nsgInnerIndex = (nsg.nsgInnerIndex + 1) % defaultFaultDomainZoneCnt
-				log.LogErrorf("action[getHostFromNodeSetGrpSpecfic]  nodesetid[%v],zonename[%v], datanode len[%v],metanode len[%v],capcity[%v]",
+				log.LogInfof("action[getHostFromNodeSetGrpSpecfic]  nodesetid[%v],zonename[%v], datanode len[%v],metanode len[%v],capcity[%v]",
 					ns.ID, ns.zoneName, ns.dataNodeLen(), ns.metaNodeLen(), ns.Capacity)
 
 				if createType == TypeDataPartion {
@@ -496,12 +497,12 @@ func (nsgm *nodeSetGrpManager) getHostFromNodeSetGrpSpecific(replicaNum uint8, c
 			}
 			// break if host not found
 			if n + 1 != len(hosts) {
-				log.LogErrorf("action[getHostFromNodeSetGrpSpecfic]  ngGrp[%v] unable support type[%v] replicaNum[%v]", nsg.ID, createType, replicaNum)
+				log.LogInfof("action[getHostFromNodeSetGrpSpecfic]  ngGrp[%v] unable support type[%v] replicaNum[%v]", nsg.ID, createType, replicaNum)
 				break
 			}
 		}
 		if int(replicaNum) == len(hosts) {
-			log.LogInfof("action[getHostFromNodeSetGrpSpecfic] success get hosts[%v] peers[%v]", hosts, peers)
+			log.LogErrorf("action[getHostFromNodeSetGrpSpecfic] success get hosts[%v] peers[%v]", hosts, peers)
 			return
 		}
 		hosts = nil
@@ -520,9 +521,7 @@ func (nsgm *nodeSetGrpManager) getHostFromNodeSetGrp(replicaNum uint8, createTyp
 				replicaNum, createType, len(nsgm.nodeSetGrpMap), nsgm.status)
 
 	// this scenario is abnormal  may be caused by zone unavailable in high probability
-	if nsgm.status == unavaliable ||
-		(createType == TypeMetaPartion && nsgm.status == metaNodesUnavaliable) ||
-		(createType == TypeDataPartion && nsgm.status == dataNodesUnavaliable){
+	if nsgm.status != normal {
 		return nsgm.getHostFromNodeSetGrpSpecific(replicaNum, createType)
 	}
 	// grp map be build with three zone on standard,no grp if zone less than three,here will build
@@ -560,7 +559,7 @@ func (nsgm *nodeSetGrpManager) getHostFromNodeSetGrp(replicaNum uint8, createTyp
 		var i uint8
 		for i = 0; i < replicaNum; i++ {
 			ns := nsg.nodeSets[nsg.nsgInnerIndex]
-			log.LogErrorf("action[getHostFromNodeSetGrp]  nodesetid[%v],zonename[%v], datanode len[%v],metanode len[%v],capcity[%v]",
+			log.LogInfof("action[getHostFromNodeSetGrp]  nodesetid[%v],zonename[%v], datanode len[%v],metanode len[%v],capcity[%v]",
 							ns.ID, ns.zoneName, ns.dataNodeLen(), ns.metaNodeLen(), ns.Capacity)
 			nsg.nsgInnerIndex = (nsg.nsgInnerIndex+1) % defaultFaultDomainZoneCnt
 			if createType == TypeDataPartion {
@@ -917,7 +916,7 @@ func (t *topology) getDomainExcludeZones() (zones []*Zone) {
 	for i:= 0; i < len(t.domainExcludeZones); i++ {
 		if value, ok := t.zoneMap.Load(t.domainExcludeZones[i]); ok {
 			zones = append(zones, value.(*Zone))
-			log.LogInfo("action[getDomainExcludeZones] append zone name:[%v]_[%v]", t.domainExcludeZones[i], value.(*Zone).name)
+			log.LogInfof("action[getDomainExcludeZones] append zone name:[%v]_[%v]", t.domainExcludeZones[i], value.(*Zone).name)
 		}
 	}
 	return
@@ -957,7 +956,7 @@ func calculateDemandWriteNodes(zoneNum int, replicaNum int) (demandWriteNodes in
 func (t *topology) allocZonesForMetaNode(zoneNum, replicaNum int, excludeZone []string) (zones []*Zone, err error) {
 	if len(t.domainExcludeZones) > 0 {
 		zones = t.getDomainExcludeZones()
-		log.LogInfof("action[allocZonesForMetaNode] getDomainExcludeZones zones [%v]", zones)
+		log.LogInfof("action[allocZonesForMetaNode] getDomainExcludeZones zones [%v]", t.domainExcludeZones)
 	} else {
 		// if domain enable, will not enter here
 		zones = t.getAllZones()
@@ -974,7 +973,7 @@ func (t *topology) allocZonesForMetaNode(zoneNum, replicaNum int, excludeZone []
 		if t.zoneIndexForMetaNode >= len(zones) {
 			t.zoneIndexForMetaNode = 0
 		}
-		zone := t.getZoneByIndex(t.zoneIndexForMetaNode)
+		zone := zones[t.zoneIndexForMetaNode]
 		t.zoneIndexForMetaNode++
 		if zone.status == unavailableZone {
 			continue
@@ -1022,7 +1021,7 @@ func (t *topology) allocZonesForDataNode(zoneNum, replicaNum int, excludeZone []
 		if t.zoneIndexForDataNode >= len(zones) {
 			t.zoneIndexForDataNode = 0
 		}
-		zone := t.getZoneByIndex(t.zoneIndexForDataNode)
+		zone := zones[t.zoneIndexForDataNode]
 		t.zoneIndexForDataNode++
 		if zone.status == unavailableZone {
 			continue
@@ -1312,7 +1311,7 @@ func (zone *Zone) canWriteForDataNode(replicaNum uint8) (can bool) {
 	var leastAlive uint8
 	zone.dataNodes.Range(func(addr, value interface{}) bool {
 		dataNode := value.(*DataNode)
-		if dataNode.isActive == true && dataNode.isWriteAble() == true {
+		if dataNode.isActive == true && dataNode.isWriteAbleWithSize(30*util.GB) == true {
 			leastAlive++
 		}
 		if leastAlive >= replicaNum {

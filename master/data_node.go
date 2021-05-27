@@ -99,8 +99,6 @@ func (dataNode *DataNode) updateNodeMetric(resp *proto.DataNodeHeartbeatResponse
 	}
 	dataNode.ReportTime = time.Now()
 	dataNode.isActive = true
-
-
 }
 
 func (dataNode *DataNode) isWriteAble() (ok bool) {
@@ -108,6 +106,17 @@ func (dataNode *DataNode) isWriteAble() (ok bool) {
 	defer dataNode.RUnlock()
 
 	if dataNode.isActive == true && dataNode.AvailableSpace > 10*util.GB {
+		ok = true
+	}
+
+	return
+}
+
+func (dataNode *DataNode) isWriteAbleWithSize(size uint64) (ok bool) {
+	dataNode.RLock()
+	defer dataNode.RUnlock()
+
+	if dataNode.isActive == true && dataNode.AvailableSpace > size {
 		ok = true
 	}
 
