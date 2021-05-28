@@ -720,8 +720,6 @@ func (c *Cluster) batchCreateDataPartition(vol *Vol, reqCount int) (err error) {
 	return
 }
 func (c *Cluster) isFaultDomain( vol *Vol) bool{
-	log.LogInfof("action[isFaultDomain] vol [%v] zoname [%v] FaultDomain[%v] need fault domain[%v] vol crosszone[%v] default[%v]",
-		vol.Name, vol.zoneName, c.FaultDomain,c.needFaultDomain,vol.crossZone, vol.defaultPriority)
 	var specifyZoneNeedDomain bool
 	if c.FaultDomain && !vol.crossZone && !c.needFaultDomain {
 		if value, ok := c.t.zoneMap.Load(vol.zoneName); ok{
@@ -730,7 +728,8 @@ func (c *Cluster) isFaultDomain( vol *Vol) bool{
 			}
 		}
 	}
-
+	log.LogInfof("action[isFaultDomain] vol [%v] zoname [%v] FaultDomain[%v] need fault domain[%v] vol crosszone[%v] default[%v] specifyZoneNeedDomain[%v]",
+		vol.Name, vol.zoneName, c.FaultDomain,c.needFaultDomain,vol.crossZone, vol.defaultPriority, specifyZoneNeedDomain)
 	return c.FaultDomain  &&
 		((!vol.crossZone && c.needFaultDomain) || specifyZoneNeedDomain ||
 				(vol.crossZone && (!vol.defaultPriority ||
