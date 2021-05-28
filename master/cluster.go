@@ -1597,6 +1597,7 @@ func (c *Cluster) updateVol(name, authKey string, newArgs *VolVarargs) (err erro
 		oldDpSelectorName string
 		oldDpSelectorParm string
 		volUsedSpace      uint64
+		newZoneName       string
 	)
 	if vol, err = c.getVol(name); err != nil {
 		log.LogErrorf("action[updateVol] err[%v]", err)
@@ -1621,10 +1622,10 @@ func (c *Cluster) updateVol(name, authKey string, newArgs *VolVarargs) (err erro
 		goto errHandler
 	}
 
-	if err = c.checkVolInfo(name, vol.crossZone, newArgs.zoneName); err != nil {
+	if newZoneName, err = c.checkVolInfo(name, vol.crossZone, newArgs.zoneName); err != nil {
 		goto errHandler
 	}
-
+	newArgs.zoneName = newZoneName
 	oldCapacity = vol.Capacity
 	oldDpReplicaNum = vol.dpReplicaNum
 	oldFollowerRead = vol.FollowerRead
@@ -1670,36 +1671,37 @@ errHandler:
 	return
 }
 
-func (c *Cluster) checkVolInfo(name string, crossZone bool, zoneName string) (err error){
+func (c *Cluster) checkVolInfo(name string, crossZone bool, zoneName string) (newZoneName string, err error){
+	newZoneName = zoneName
 	if crossZone {
 		if c.t.zoneLen() <= 1 && !c.FaultDomain{
-			return fmt.Errorf("action[checkVolInfo] cluster has one zone,can't cross zone")
+			return newZoneName, fmt.Errorf("action[checkVolInfo] cluster has one zone,can't cross zone")
 		}
-		if zoneName != "" {
-			return fmt.Errorf("action[checkVolInfo] only the vol which don't across zones,can specified zoneName")
+		if newZoneName != "" {
+			return newZoneName, fmt.Errorf("action[checkVolInfo] only the vol which don't across zones,can specified zoneName")
 		}
 	} else {
 		// len(c.t.zones) is 0, or set false in check status
-		if zoneName == ""{
+		if newZoneName == ""{
 			if  !c.needFaultDomain {
 				if c.t.getZone(DefaultZoneName); err != nil {
-					return fmt.Errorf("action[checkVolInfo] the vol is not cross zone and didn't set zone name,but there's no default zone")
+					return newZoneName, fmt.Errorf("action[checkVolInfo] the vol is not cross zone and didn't set zone name,but there's no default zone")
 				}
 				log.LogInfof("action[checkVolInfo] vol [%v] use default zone", name)
-				zoneName = DefaultZoneName
+				newZoneName = DefaultZoneName
 			}
 		} else {
 			if c.FaultDomain {
 				var isExcludeZone bool
 				// zonename should be in old zones and be excluded from domain
 				for i := 0; i < len(c.t.domainExcludeZones); i++ {
-					if zoneName == c.t.domainExcludeZones[i] {
+					if newZoneName == c.t.domainExcludeZones[i] {
 						isExcludeZone = true
 						break
 					}
 				}
 				if !isExcludeZone {
-					return fmt.Errorf("action[checkVolInfo] the zonename[%v] not execluded domain name.should not be assigned")
+					return newZoneName, fmt.Errorf("action[checkVolInfo] the zonename[%v] not execluded domain name.should not be assigned")
 				}
 			}
 		}
@@ -1715,6 +1717,7 @@ func (c *Cluster) createVol(name, owner, zoneName, description string,
 	var (
 		dataPartitionSize       uint64
 		readWriteDataPartitions int
+		newZoneName             string
 	)
 	if size * util.GB < util.DefaultDataPartitionSize {
 		dataPartitionSize = util.DefaultDataPartitionSize
@@ -1726,9 +1729,11 @@ func (c *Cluster) createVol(name, owner, zoneName, description string,
 			return
 		}
 	}
-	if err = c.checkVolInfo(name, crossZone, zoneName); err != nil {
+
+	if newZoneName, err = c.checkVolInfo(name, crossZone, zoneName); err != nil {
 		return
 	}
+	zoneName = newZoneName
 	if vol, err = c.doCreateVol(name, owner, zoneName, description,
 						dataPartitionSize, uint64(capacity), dpReplicaNum,
 						followerRead, authenticate, crossZone,
