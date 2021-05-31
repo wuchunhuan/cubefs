@@ -295,8 +295,18 @@ type ReadDirRequest struct {
 	ParentID    uint64 `json:"pino"`
 }
 
+type ReadDirOnlyRequest struct {
+	VolName     string `json:"vol"`
+	PartitionID uint64 `json:"pid"`
+	ParentID    uint64 `json:"pino"`
+}
+
 // ReadDirResponse defines the response to the request of reading dir.
 type ReadDirResponse struct {
+	Children []Dentry `json:"children"`
+}
+
+type ReadDirOnlyResponse struct {
 	Children []Dentry `json:"children"`
 }
 
@@ -435,6 +445,14 @@ type BatchGetXAttrResponse struct {
 	VolName     string `json:"vol"`
 	PartitionId uint64 `json:"pid"`
 	XAttrs      []*XAttrInfo
+}
+
+type UpdateXAttrRequest struct {
+	VolName     string `json:"vol"`
+	PartitionId uint64 `json:"pid"`
+	Inode       uint64 `json:"ino"`
+	Key         string `json:"key"`
+	Value       string `json:"val"`
 }
 
 type MultipartInfo struct {
