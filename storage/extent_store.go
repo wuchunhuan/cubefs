@@ -375,9 +375,21 @@ func (s *ExtentStore) tinyDelete(extentID uint64, offset, size int64) (err error
 	if err != nil {
 		return nil
 	}
+
 	if offset+size > e.dataSize {
 		return
 	}
+
+	if offset%PageSize != 0 { // truncate case
+		size -= int64(PageSize - int(offset)%PageSize)
+		offset += int64(PageSize - int(offset)%PageSize)
+	}
+
+	if size <= 0 {
+		log.LogInfof("[TinyDelete] no need to delete. offset %d, size %d\n", offset, size)
+		return
+	}
+
 	var (
 		hasDelete bool
 	)
@@ -411,8 +423,10 @@ func (s *ExtentStore) MarkDelete(extentID uint64, offset, size int64) (err error
 	}
 	extentFilePath := path.Join(s.dataPath, strconv.FormatUint(extentID, 10))
 	if err = os.Remove(extentFilePath); err != nil {
+		log.LogErrorf("[MarkDeleteNormalExtent] remove file fail, id %d, offset %d, size %d\n", extentID, offset, size)
 		return
 	}
+
 	s.PersistenceHasDeleteExtent(extentID)
 	ei.IsDeleted = true
 	ei.ModifyTime = time.Now().Unix()
