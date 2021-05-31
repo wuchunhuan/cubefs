@@ -54,6 +54,7 @@ type Vol struct {
 	FollowerRead       bool
 	authenticate       bool
 	crossZone          bool
+	domainOn           bool
 	defaultPriority    bool // old default zone first
 	zoneName           string
 	MetaPartitions     map[uint64]*MetaPartition `graphql:"-"`
@@ -461,6 +462,7 @@ func (vol *Vol) updateViewCache(c *Cluster) {
 	vol.setMpsCache(mpsBody)
 	dpResps := vol.dataPartitions.getDataPartitionsView(0)
 	view.DataPartitions = dpResps
+	view.DomainOn = vol.domainOn
 	viewReply := newSuccessHTTPReply(view)
 	body, err := json.Marshal(viewReply)
 	if err != nil {

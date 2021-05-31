@@ -788,6 +788,8 @@ func newSimpleView(vol *Vol) *proto.SimpleVolView {
 		NeedToLowerReplica: vol.NeedToLowerReplica,
 		Authenticate:       vol.authenticate,
 		CrossZone:          vol.crossZone,
+		DefaultPriority:    vol.defaultPriority,
+		DomainOn:           vol.domainOn,
 		RwDpCnt:            vol.dataPartitions.readableAndWritableCnt,
 		MpCnt:              len(vol.MetaPartitions),
 		DpCnt:              len(vol.dataPartitions.partitionMap),
@@ -964,6 +966,14 @@ func (m *Server) updateDataUseRatio(ratio float64) (err error) {
 	defer m.cluster.nodeSetGrpManager.Unlock()
 
 	m.cluster.nodeSetGrpManager.dataRatioLimit = ratio
+	err = m.cluster.putZoneDomain(false)
+	return
+}
+func (m *Server) updateExcludeZoneUseRatio(ratio float64) (err error) {
+	m.cluster.nodeSetGrpManager.Lock()
+	defer m.cluster.nodeSetGrpManager.Unlock()
+
+	m.cluster.nodeSetGrpManager.excludeZoneUseRatio = ratio
 	err = m.cluster.putZoneDomain(false)
 	return
 }
@@ -1184,6 +1194,27 @@ func (m *Server) updateDataUseRatioHandler(w http.ResponseWriter, r *http.Reques
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
 }
 
+func (m *Server) updateZoneExcludeRatioHandler(w http.ResponseWriter, r *http.Request) {
+	var (
+		params map[string]interface{}
+		err    error
+	)
+	var value string
+	if value = r.FormValue(ratio); value == "" {
+		err = keyNotFound(ratio)
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+	}
+	var ratioVal float64
+	if ratioVal, err = strconv.ParseFloat(value, 64); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+	}
+
+	if  err = m.updateExcludeZoneUseRatio(ratioVal); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+	}
+	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
+}
+
 func (m *Server) updateNodeSetIdHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		nodeAddr     string
@@ -1256,6 +1287,7 @@ func (m *Server) getAllNodeSetGrpInfoHandler(w http.ResponseWriter, r *http.Requ
 	nsglStat.DomainOn = m.cluster.FaultDomain
 	nsglStat.NeedDomain = m.cluster.needFaultDomain
 	nsglStat.DataRatioLimit = nsgm.dataRatioLimit
+	nsglStat.ZoneExcludeRatioLimit = nsgm.excludeZoneUseRatio
 	nsglStat.Status = nsgm.status
 	nsglStat.ExcludeZones = nsgm.c.t.domainExcludeZones
 	for i = 0; i < len(nsgm.nodeSetGrpMap) ; i++ {

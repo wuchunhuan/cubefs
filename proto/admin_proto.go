@@ -44,6 +44,7 @@ const (
 	AdminUpdateNodeSetCapcity = "/admin/updateNodeSetCapcity"
 	AdminUpdateNodeSetId      = "/admin/updateNodeSetId"
 	AdminUpdateDataUseRatio   = "/admin/updateDataRatio"
+	AdminUpdateZoneExcludeRatio   = "/admin/updateZoneExcludeRatio"
 	//graphql master api
 	AdminClusterAPI = "/api/cluster"
 	AdminUserAPI    = "/api/user"
@@ -426,6 +427,7 @@ type VolView struct {
 	FollowerRead   bool
 	MetaPartitions []*MetaPartitionView
 	DataPartitions []*DataPartitionResponse
+	DomainOn       bool
 	OSSSecure      *OSSSecure
 	CreateTime     int64
 }
@@ -479,6 +481,8 @@ type SimpleVolView struct {
 	NeedToLowerReplica bool
 	Authenticate       bool
 	CrossZone          bool
+	DefaultPriority    bool
+	DomainOn           bool
 	CreateTime         string
 	EnableToken        bool
 	Description        string
@@ -508,6 +512,7 @@ type SimpleNodeSetGrpInfo struct {
 type SimpleNodeSetGrpInfoList struct {
 	DomainOn             bool
 	DataRatioLimit       float64
+	ZoneExcludeRatioLimit float64
 	NeedDomain           bool
 	Status               uint8
 	ExcludeZones         []string

@@ -259,6 +259,9 @@ func (m *Server) registerAPIRoutes(router *mux.Router) {
 	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
 		Path(proto.AdminUpdateDataUseRatio).
 		HandlerFunc(m.updateDataUseRatioHandler)
+	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
+		Path(proto.AdminUpdateZoneExcludeRatio).
+		HandlerFunc(m.updateZoneExcludeRatioHandler)
 
 	// user management APIs
 	router.NewRoute().Methods(http.MethodPost).

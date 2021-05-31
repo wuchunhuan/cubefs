@@ -728,12 +728,20 @@ func (c *Cluster) isFaultDomain( vol *Vol) bool{
 			}
 		}
 	}
-	log.LogInfof("action[isFaultDomain] vol [%v] zoname [%v] FaultDomain[%v] need fault domain[%v] vol crosszone[%v] default[%v] specifyZoneNeedDomain[%v]",
-		vol.Name, vol.zoneName, c.FaultDomain,c.needFaultDomain,vol.crossZone, vol.defaultPriority, specifyZoneNeedDomain)
-	return c.FaultDomain  &&
-		((!vol.crossZone && c.needFaultDomain) || specifyZoneNeedDomain ||
+	log.LogInfof("action[isFaultDomain] vol [%v] zoname [%v] FaultDomain[%v] need fault domain[%v] vol crosszone[%v] default[%v] specifyZoneNeedDomain[%v] domainOn[%v]",
+		vol.Name, vol.zoneName, c.FaultDomain,c.needFaultDomain,vol.crossZone, vol.defaultPriority, specifyZoneNeedDomain, vol.domainOn)
+	domainOn :=  c.FaultDomain  &&
+		(vol.domainOn ||
+			(!vol.crossZone && c.needFaultDomain) || specifyZoneNeedDomain ||
 				(vol.crossZone && (!vol.defaultPriority ||
 										(vol.defaultPriority && (c.needFaultDomain || len(c.t.domainExcludeZones) <= 1)))))
+	if !vol.domainOn && domainOn{
+		vol.domainOn = domainOn
+		vol.updateViewCache(c)
+		c.syncUpdateVol(vol)
+		log.LogInfof("action[isFaultDomain] vol [%v] set domainOn", vol.Name)
+	}
+	return vol.domainOn
 }
 // Synchronously create a data partition.
 // 1. Choose one of the available data nodes.

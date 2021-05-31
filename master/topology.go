@@ -211,6 +211,7 @@ type nodeSetGrpManager struct {
 	status                uint8          // all nodesetGrp may be unavaliable or no nodesetGrp be exist on given policy
 	nsIdMap               map[uint64]int // store all ns alreay be put into manager
 	dataRatioLimit        float64
+	excludeZoneUseRatio   float64
 	sync.RWMutex
 }
 
@@ -224,6 +225,7 @@ func newNodeSetGrpManager(cls *Cluster) *nodeSetGrpManager {
 		excludeZoneListDomain: make(map[string]int),
 		nsIdMap:               make(map[uint64]int),
 		dataRatioLimit:        defaultDataPartitionUsageThreshold,
+		excludeZoneUseRatio:   defaultDataPartitionUsageThreshold,
 	}
 	return ns
 }
@@ -239,8 +241,7 @@ func (nsgm *nodeSetGrpManager) checkExcludeZoneState() {
 		return
 	}
 	var (
-		metaNeedDomain = true
-		dataNeedDomain = true
+		excludeNeedDomain = true
 	)
 	log.LogInfof("action[checkExcludeZoneState] exclueZoneList size[%v]", len(nsgm.excludeZoneListDomain))
 	for zoneNm := range nsgm.excludeZoneListDomain {
@@ -248,28 +249,14 @@ func (nsgm *nodeSetGrpManager) checkExcludeZoneState() {
 			zone := value.(*Zone)
 			log.LogInfof("action[checkExcludeZoneState] zone name[%v],status[%v], index for datanode[%v],index for metanode[%v]",
 				zone.name, zone.status, zone.setIndexForDataNode, zone.setIndexForMetaNode)
-			var (
-				zoneDataNeedDomain = true
-				zoneMetaNeedDomain = true
-			)
 
-			if zone.canWriteForDataNode(defaultFaultDomainZoneCnt) {
-				log.LogInfof("action[checkExcludeZoneState] zone[%v]  canWriteForDataNode", zone.name)
-				dataNeedDomain = false
-				zoneDataNeedDomain = false
-			}
-			if zone.canWriteForMetaNode(defaultFaultDomainZoneCnt) {
-				log.LogInfof("action[checkExcludeZoneState] zone[%v]  canWriteForMetaNode", zone.name)
-				metaNeedDomain = false
-				zoneMetaNeedDomain = false
-			}
-
-			if zoneDataNeedDomain || zoneMetaNeedDomain {
+			if zone.isUsedRatio(nsgm.excludeZoneUseRatio) {
 				if zone.status == normalZone {
 					log.LogInfof("action[checkExcludeZoneState] zone[%v] be set unavailableZone", zone.name)
 				}
 				zone.status = unavailableZone
 			} else {
+				excludeNeedDomain = false
 				if zone.status == unavailableZone {
 					log.LogInfof("action[checkExcludeZoneState] zone[%v] be set normalZone", zone.name)
 				}
@@ -277,9 +264,9 @@ func (nsgm *nodeSetGrpManager) checkExcludeZoneState() {
 			}
 		}
 	}
-	if metaNeedDomain || dataNeedDomain {
-		log.LogInfof("action[checkExcludeZoneState] exclude zone cann't be used since now!metaNeedDomain[%v] dataNeedDomain[%v]",
-			metaNeedDomain, dataNeedDomain)
+	if excludeNeedDomain {
+		log.LogInfof("action[checkExcludeZoneState] exclude zone cann't be used since now!excludeNeedDomain[%v]",
+			excludeNeedDomain)
 		nsgm.c.needFaultDomain = true
 	} else {
 		if nsgm.c.needFaultDomain == true {
@@ -1322,6 +1309,49 @@ func (zone *Zone) canWriteForDataNode(replicaNum uint8) (can bool) {
 	})
 	log.LogInfof("canWriteForDataNode leastAlive[%v],replicaNum[%v],count[%v]\n", leastAlive, replicaNum, zone.dataNodeCount())
 	return
+}
+func (zone *Zone) isUsedRatio(ratio float64) (can bool) {
+	zone.RLock()
+	defer zone.RUnlock()
+	var (
+		dataNodeUsed  uint64
+		dataNodeTotal uint64
+		metaNodeUsed  uint64
+		metaNodeTotal uint64
+	)
+	zone.dataNodes.Range(func(addr, value interface{}) bool {
+		dataNode := value.(*DataNode)
+		if dataNode.isActive == true{
+			dataNodeUsed  += dataNode.Used
+		} else {
+			dataNodeUsed  += dataNode.Total
+		}
+		dataNodeTotal += dataNode.Total
+		return true
+	})
+
+	if float64(dataNodeUsed)/float64(dataNodeTotal) > ratio {
+		log.LogInfof("action[isUsedRatio] zone[%v] dataNodeUsed [%v] total [%v], ratio[%v]", zone.name, dataNodeUsed, dataNodeTotal, ratio)
+		return true
+	}
+
+	zone.metaNodes.Range(func(addr, value interface{}) bool {
+		metaNode := value.(*MetaNode)
+		if metaNode.IsActive == true && metaNode.isWritable() == true {
+			metaNodeUsed += metaNode.Used
+		} else {
+			metaNodeUsed += metaNode.Total
+		}
+		metaNodeTotal += metaNode.Total
+		return true
+	})
+
+	if float64(metaNodeUsed)/float64(metaNodeTotal) > ratio {
+		log.LogInfof("action[isUsedRatio] zone[%v] metaNodeUsed [%v] total [%v], ratio[%v]", zone.name, metaNodeUsed, metaNodeTotal, ratio)
+		return true
+	}
+
+	return false
 }
 
 func (zone *Zone) canWriteForMetaNode(replicaNum uint8) (can bool) {

@@ -137,6 +137,7 @@ type volValue struct {
 	FollowerRead      bool
 	Authenticate      bool
 	CrossZone         bool
+	DomainOn          bool
 	ZoneName          string
 	OSSAccessKey      string
 	OSSSecretKey      string
@@ -165,6 +166,7 @@ func newVolValue(vol *Vol) (vv *volValue) {
 		FollowerRead:      vol.FollowerRead,
 		Authenticate:      vol.authenticate,
 		CrossZone:         vol.crossZone,
+		DomainOn:          vol.domainOn,
 		ZoneName:          vol.zoneName,
 		OSSAccessKey:      vol.OSSAccessKey,
 		OSSSecretKey:      vol.OSSSecretKey,
@@ -233,6 +235,7 @@ type zoneDomainValue struct {
 	ExcludeZoneMap  map[string]int
 	NeedFaultDomain bool
 	DataRatio       float64
+	ExcludeZoneUseRatio    float64
 }
 func newZoneDomainValue() (ev *zoneDomainValue) {
 	ev = &zoneDomainValue{
@@ -630,6 +633,12 @@ func (c *Cluster) putZoneDomain(init bool) (err error) {
 	} else {
 		domainValue.DataRatio = defaultDataPartitionUsageThreshold
 	}
+	if c.nodeSetGrpManager.excludeZoneUseRatio > 0 {
+		domainValue.DataRatio = c.nodeSetGrpManager.excludeZoneUseRatio
+	} else {
+		domainValue.DataRatio = defaultDataPartitionUsageThreshold
+	}
+
 	metadata.V, err = json.Marshal(domainValue)
 	if err != nil {
 		return
@@ -662,6 +671,7 @@ func (c *Cluster) loadZoneDomain() (ok bool, err error) {
 		}
 		c.needFaultDomain = nsv.NeedFaultDomain
 		c.nodeSetGrpManager.dataRatioLimit = nsv.DataRatio
+		c.nodeSetGrpManager.excludeZoneUseRatio = nsv.ExcludeZoneUseRatio
 		break
 	}
 	log.LogInfof("action[loadZoneDomain] success!")
