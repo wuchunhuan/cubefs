@@ -245,16 +245,14 @@ func (client *ExtentClient) Truncate(mw *meta.MetaWrapper, parentIno uint64, ino
 	if s == nil {
 		return fmt.Errorf("Prefix(%v): stream is not opened yet", prefix)
 	}
-	oldSize, _, _ := client.FileSize(inode)
-	err := s.IssueTruncRequest(size)
+	info, err := mw.InodeGet_ll(inode)
+	oldSize := info.Size
+	err = s.IssueTruncRequest(size)
 	if err != nil {
 		err = errors.Trace(err, prefix)
 		log.LogError(errors.Stack(err))
 	}
-	sizeInc := size - oldSize
-	if sizeInc > 0 {
-		go mw.UpdateSummary_ll(parentIno, 0, 0, int64(sizeInc))
-	}
+	go mw.UpdateSummary_ll(parentIno, 0, 0, int64(size) - int64(oldSize))
 	return err
 }
 
