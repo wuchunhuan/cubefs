@@ -28,6 +28,8 @@ func (mp *metaPartition) UpdateXAttr(req *proto.UpdateXAttrRequest, p *Packet) (
 	dirsInc, _ := strconv.ParseInt(newValueList[1], 10, 64)
 	bytesInc, _ := strconv.ParseInt(newValueList[2], 10, 64)
 
+	mp.xattrLock.Lock()
+	defer mp.xattrLock.Unlock()
 	treeItem := mp.extendTree.Get(NewExtend(req.Inode))
 	if treeItem != nil {
 		extend := treeItem.(*Extend)

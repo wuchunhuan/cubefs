@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"fmt"
@@ -221,6 +222,7 @@ type metaPartition struct {
 	vol                    *Vol
 	manager                *metadataManager
 	isLoadingMetaPartition bool
+	xattrLock				sync.Mutex
 }
 
 func (mp *metaPartition) ForceSetMetaPartitionToLoadding() {

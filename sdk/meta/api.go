@@ -557,9 +557,11 @@ func (mw *MetaWrapper) AppendExtentKey(fileSize int, parentInode, inode uint64, 
 	}
 	log.LogDebugf("AppendExtentKey: ino(%v) ek(%v) discard(%v)", inode, ek, discard)
 
+	newInfo, _ := mw.InodeGet_ll(inode)
+
 	if oldInfo != nil {
 		if int64(oldInfo.Size) < int64(fileSize) {
-			go mw.UpdateSummary_ll(parentInode, 0, 0, int64(fileSize) - int64(oldInfo.Size))
+			go mw.UpdateSummary_ll(parentInode, 0, 0, int64(newInfo.Size) - int64(oldInfo.Size))
 		}
 	}
 
