@@ -633,7 +633,7 @@ func (c *Cluster) putZoneDomain(init bool) (err error) {
 	} else {
 		domainValue.DataRatio = defaultDataPartitionUsageThreshold
 	}
-	if c.nodeSetGrpManager.excludeZoneUseRatio > 0 {
+	if c.nodeSetGrpManager.excludeZoneUseRatio > 0 && c.nodeSetGrpManager.excludeZoneUseRatio <= 1{
 		domainValue.DataRatio = c.nodeSetGrpManager.excludeZoneUseRatio
 	} else {
 		domainValue.DataRatio = defaultDataPartitionUsageThreshold
