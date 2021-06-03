@@ -249,7 +249,9 @@ func (nsgm *nodeSetGrpManager) checkExcludeZoneState() {
 			zone := value.(*Zone)
 			log.LogInfof("action[checkExcludeZoneState] zone name[%v],status[%v], index for datanode[%v],index for metanode[%v]",
 				zone.name, zone.status, zone.setIndexForDataNode, zone.setIndexForMetaNode)
-
+			if nsgm.excludeZoneUseRatio == 0 || nsgm.excludeZoneUseRatio > 1 {
+				nsgm.excludeZoneUseRatio = defaultDataPartitionUsageThreshold
+			}
 			if zone.isUsedRatio(nsgm.excludeZoneUseRatio) {
 				if zone.status == normalZone {
 					log.LogInfof("action[checkExcludeZoneState] zone[%v] be set unavailableZone", zone.name)
@@ -519,6 +521,10 @@ func (nsgm *nodeSetGrpManager) getHostFromNodeSetGrp(replicaNum uint8, createTyp
 			log.LogInfof("action[getHostFromNodeSetGrp] err[%v]", err)
 			return
 		}
+	} else if len(nsgm.nodeSetGrpMap) == 0 {
+		err = fmt.Errorf("no usable group")
+		log.LogInfof("action[getHostFromNodeSetGrp] err[%v]", err)
+		return
 	}
 
 	nsgm.RLock()

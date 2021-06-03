@@ -1127,7 +1127,6 @@ func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
 		nsg.nodeSets[i].dataNodes.Range(func(key, value interface{}) bool {
 			node := value.(*DataNode)
 			nsStat.DataTotal += node.Total
-			nsStat.DataUsed += node.Used
 			if node.isWriteAble() {
 				nsStat.DataUsed += node.Used
 			} else {
@@ -1182,14 +1181,20 @@ func (m *Server) updateDataUseRatioHandler(w http.ResponseWriter, r *http.Reques
 	if value = r.FormValue(ratio); value == "" {
 		err = keyNotFound(ratio)
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
 	}
 	var ratioVal float64
 	if ratioVal, err = strconv.ParseFloat(value, 64); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
 	}
-
+	if ratioVal == 0 || ratioVal > 1{
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
 	if  err = m.updateDataUseRatio(ratioVal); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
 	}
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
 }
@@ -1203,14 +1208,17 @@ func (m *Server) updateZoneExcludeRatioHandler(w http.ResponseWriter, r *http.Re
 	if value = r.FormValue(ratio); value == "" {
 		err = keyNotFound(ratio)
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
 	}
 	var ratioVal float64
 	if ratioVal, err = strconv.ParseFloat(value, 64); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
 	}
 
 	if  err = m.updateExcludeZoneUseRatio(ratioVal); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
 	}
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
 }
