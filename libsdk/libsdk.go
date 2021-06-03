@@ -134,6 +134,7 @@ func newClient() *client {
 		cwd:   "/",
 		ic:    fs.NewInodeCache(fs.DefaultInodeExpiration, fs.MaxInodeCache),
 		dc:    fs.NewDentryCache(),
+		sc:    meta.NewSummaryCache(meta.DefaultSummaryExpiration, meta.MaxSummaryCache),
 	}
 
 	gClientManager.mu.Lock()
@@ -193,6 +194,7 @@ type client struct {
 	ec *stream.ExtentClient
 	ic *fs.InodeCache
 	dc *fs.DentryCache
+	sc *meta.SummaryCache
 }
 
 //export cfs_new_client
@@ -682,7 +684,7 @@ func cfs_refreshsummary(id C.int64_t) C.int {
 }
 
 //export cfs_getsummary
-func cfs_getsummary(id C.int64_t, path *C.char, summary *C.struct_cfs_summary_info) C.int {
+func cfs_getsummary(id C.int64_t, path *C.char, summary *C.struct_cfs_summary_info, useCache *C.char) C.int {
 	c, exist := getClient(int64(id))
 	if !exist {
 		return statusEINVAL
@@ -693,12 +695,25 @@ func cfs_getsummary(id C.int64_t, path *C.char, summary *C.struct_cfs_summary_in
 		return errorToStatus(err)
 	}
 
+	if strings.ToLower(C.GoString(useCache)) != "false" {
+		cacheSummaryInfo := c.sc.Get(info.Inode)
+		if cacheSummaryInfo != nil {
+			summary.files = C.uint32_t(cacheSummaryInfo.Files)
+			summary.subdirs = C.uint32_t(cacheSummaryInfo.Subdirs)
+			summary.fbytes = C.uint64_t(cacheSummaryInfo.Fbytes)
+			return statusOK
+		}
+	}
+
 	if !proto.IsDir(info.Mode) {
 		return statusENOTDIR
 	}
 	summaryInfo, err := c.mw.GetSummary_ll(info.Inode)
 	if err != nil {
 		return statusEIO
+	}
+	if strings.ToLower(C.GoString(useCache)) != "false" {
+		c.sc.Put(info.Inode, &summaryInfo)
 	}
 	summary.files = C.uint32_t(summaryInfo.Files)
 	summary.subdirs = C.uint32_t(summaryInfo.Subdirs)
