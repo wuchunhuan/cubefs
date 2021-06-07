@@ -54,6 +54,7 @@ type Super struct {
 	fsyncOnClose  bool
 	enableXattr   bool
 	rootIno       uint64
+	sc *SummaryCache
 }
 
 // Functions that Super needs to implement
@@ -123,6 +124,7 @@ func NewSuper(opt *proto.MountOptions) (s *Super, err error) {
 	if s.rootIno, err = s.mw.GetRootIno(opt.SubDir); err != nil {
 		return nil, err
 	}
+	s.sc = NewSummaryCache(DefaultSummaryExpiration, MaxSummaryCache)
 
 	log.LogInfof("NewSuper: cluster(%v) volname(%v) icacheExpiration(%v) LookupValidDuration(%v) AttrValidDuration(%v)", s.cluster, s.volname, inodeExpiration, LookupValidDuration, AttrValidDuration)
 	return s, nil

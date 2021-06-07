@@ -14,8 +14,12 @@
 
 package fs
 
+import "C"
 import (
+	"github.com/chubaofs/chubaofs/sdk/meta"
+	"github.com/chubaofs/chubaofs/util/errors"
 	"os"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -442,20 +446,119 @@ func (d *Dir) Link(ctx context.Context, req *fuse.LinkRequest, old fs.Node) (fs.
 
 // Getxattr has not been implemented yet.
 func (d *Dir) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
-	return fuse.ENOSYS
+	if !d.super.enableXattr {
+		return fuse.ENOSYS
+	}
+	ino := d.info.Inode
+	name := req.Name
+	size := req.Size
+	pos := req.Position
+
+	var value []byte
+	var info *proto.XAttrInfo
+	var err error
+
+	if name == "DirStat" {
+		var summaryInfo meta.SummaryInfo
+		cacheSummaryInfo := d.super.sc.Get(ino)
+		if cacheSummaryInfo != nil {
+			summaryInfo = *cacheSummaryInfo
+		} else {
+			summaryInfo, err = d.super.mw.GetSummary_ll(ino)
+			if err != nil {
+				log.LogErrorf("GetXattr: ino(%v) name(%v) err(%v)", ino, name, err)
+				return ParseError(err)
+			}
+			d.super.sc.Put(ino, &summaryInfo)
+		}
+
+		files := summaryInfo.Files
+		subdirs := summaryInfo.Subdirs
+		fbytes := summaryInfo.Fbytes
+		summaryStr := "Files:" + strconv.FormatInt(int64(files),10) + "," +
+			"Dirs:" + strconv.FormatInt(int64(subdirs), 10) + "," +
+			"Bytes:" + strconv.FormatInt(int64(fbytes), 10)
+		value = []byte(summaryStr)
+
+	} else {
+		info, err = d.super.mw.XAttrGet_ll(ino, name)
+		if err != nil {
+			log.LogErrorf("GetXattr: ino(%v) name(%v) err(%v)", ino, name, err)
+			return ParseError(err)
+		}
+		value = info.Get(name)
+	}
+
+	if pos > 0 {
+		value = value[pos:]
+	}
+	if size > 0 && size < uint32(len(value)) {
+		value = value[:size]
+	}
+	resp.Xattr = value
+	log.LogDebugf("TRACE GetXattr: ino(%v) name(%v)", ino, name)
+	return nil
 }
 
 // Listxattr has not been implemented yet.
 func (d *Dir) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *fuse.ListxattrResponse) error {
-	return fuse.ENOSYS
+	if !d.super.enableXattr {
+		return fuse.ENOSYS
+	}
+	ino := d.info.Inode
+	_ = req.Size     // ignore currently
+	_ = req.Position // ignore currently
+
+	keys, err := d.super.mw.XAttrsList_ll(ino)
+	if err != nil {
+		log.LogErrorf("ListXattr: ino(%v) err(%v)", ino, err)
+		return ParseError(err)
+	}
+	for _, key := range keys {
+		resp.Append(key)
+	}
+	log.LogDebugf("TRACE Listxattr: ino(%v)", ino)
+	return nil
 }
 
 // Setxattr has not been implemented yet.
 func (d *Dir) Setxattr(ctx context.Context, req *fuse.SetxattrRequest) error {
-	return fuse.ENOSYS
+	if !d.super.enableXattr {
+		return fuse.ENOSYS
+	}
+	ino := d.info.Inode
+	name := req.Name
+	value := req.Xattr
+	if name == "DirStat" {
+		err := errors.New("Set 'DirStat' is not supported.")
+		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
+		return nil
+	}
+	// TODO： implement flag to improve compatible (Mofei Zhang)
+	if err := d.super.mw.XAttrSet_ll(ino, []byte(name), []byte(value)); err != nil {
+		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
+		return ParseError(err)
+	}
+	log.LogDebugf("TRACE Setxattr: ino(%v) name(%v)", ino, name)
+	return nil
 }
 
 // Removexattr has not been implemented yet.
 func (d *Dir) Removexattr(ctx context.Context, req *fuse.RemovexattrRequest) error {
-	return fuse.ENOSYS
+	if !d.super.enableXattr {
+		return fuse.ENOSYS
+	}
+	ino := d.info.Inode
+	name := req.Name
+	if name == "DirStat" {
+		err := errors.New("Remove 'DirStat' is not supported.")
+		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
+		return nil
+	}
+	if err := d.super.mw.XAttrDel_ll(ino, name); err != nil {
+		log.LogErrorf("Removexattr: ino(%v) name(%v) err(%v)", ino, name, err)
+		return ParseError(err)
+	}
+	log.LogDebugf("TRACE RemoveXattr: ino(%v) name(%v)", ino, name)
+	return nil
 }

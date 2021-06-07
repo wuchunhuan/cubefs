@@ -542,7 +542,7 @@ func (mw *MetaWrapper) DentryUpdate_ll(parentID uint64, name string, inode uint6
 }
 
 // Used as a callback by stream sdk
-func (mw *MetaWrapper) AppendExtentKey(fileSize int, parentInode, inode uint64, ek proto.ExtentKey, discard []proto.ExtentKey) error {
+func (mw *MetaWrapper) AppendExtentKey(parentInode, inode uint64, ek proto.ExtentKey, discard []proto.ExtentKey) error {
 	mp := mw.getPartitionByInode(inode)
 	if mp == nil {
 		return syscall.ENOENT
@@ -560,7 +560,7 @@ func (mw *MetaWrapper) AppendExtentKey(fileSize int, parentInode, inode uint64, 
 	newInfo, _ := mw.InodeGet_ll(inode)
 
 	if oldInfo != nil {
-		if int64(oldInfo.Size) < int64(fileSize) {
+		if int64(oldInfo.Size) < int64(newInfo.Size) {
 			go mw.UpdateSummary_ll(parentInode, 0, 0, int64(newInfo.Size) - int64(oldInfo.Size))
 		}
 	}

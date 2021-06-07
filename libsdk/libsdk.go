@@ -134,7 +134,7 @@ func newClient() *client {
 		cwd:   "/",
 		ic:    fs.NewInodeCache(fs.DefaultInodeExpiration, fs.MaxInodeCache),
 		dc:    fs.NewDentryCache(),
-		sc:    meta.NewSummaryCache(meta.DefaultSummaryExpiration, meta.MaxSummaryCache),
+		sc:    fs.NewSummaryCache(fs.DefaultSummaryExpiration, fs.MaxSummaryCache),
 	}
 
 	gClientManager.mu.Lock()
@@ -194,7 +194,7 @@ type client struct {
 	ec *stream.ExtentClient
 	ic *fs.InodeCache
 	dc *fs.DentryCache
-	sc *meta.SummaryCache
+	sc *fs.SummaryCache
 }
 
 //export cfs_new_client
