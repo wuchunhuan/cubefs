@@ -43,6 +43,8 @@ const (
 	OpenRetryLimit    = 1000
 )
 
+const SummaryKey = "DirStat"
+
 func (mw *MetaWrapper) GetRootIno(subdir string) (uint64, error) {
 	rootIno, err := mw.LookupPath(subdir)
 	if err != nil {
@@ -992,43 +994,87 @@ type SummaryInfo struct {
 	Fbytes  int64
 }
 
-func (mw *MetaWrapper) GetSummary_ll(parentIno uint64) (SummaryInfo, error) {
-	summaryXAttrInfo, err := mw.XAttrGet_ll(parentIno, "DirStat")
+func walker(mw *MetaWrapper, inode uint64, out chan<- uint64, sem chan struct{}, wg *sync.WaitGroup) {
+	sem <- struct{}{}
+	defer wg.Done()
+	entries, err := mw.ReadDirOnly_ll(inode)
 	if err != nil {
-		return SummaryInfo{0, 0, 0}, err
+		return
 	}
-	var summaryInfo SummaryInfo
-	if summaryXAttrInfo.XAttrs["DirStat"] != "" {
-		summaryList := strings.Split(summaryXAttrInfo.XAttrs["DirStat"], ",")
-		files, _ := strconv.ParseInt(summaryList[0], 10, 64)
-		subdirs, _ := strconv.ParseInt(summaryList[1], 10, 64)
-		fbytes, _ := strconv.ParseInt(summaryList[2], 10, 64)
-		summaryInfo = SummaryInfo{
-			Files: files,
-			Subdirs: subdirs,
-			Fbytes: fbytes,
+	for _, entry := range entries {
+		wg.Add(1)
+		out <- entry.Inode
+		go walker(mw, entry.Inode, out, sem, wg)
+	}
+	<- sem
+}
+
+func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64) error {
+	var inodes []uint64
+	var keys []string
+	for inode := range in {
+		inodes = append(inodes, inode)
+		keys = append(keys, SummaryKey)
+		if len(inodes) < 100 {
+			continue
 		}
-	} else {
-		summaryInfo = SummaryInfo{0,0,0}
-	}
+		xattrInfos, err := mw.BatchGetXAttr(inodes, keys)
+		if err != nil {
+			return err
+		}
 
-	children, err := mw.ReadDirOnly_ll(parentIno)
-	if err != nil {
-		return SummaryInfo{0, 0, 0}, err
-	}
-
-	for _, dentry := range children {
-		if proto.IsDir(dentry.Type) {
-			innerSummaryInfo, err := mw.GetSummary_ll(dentry.Inode)
-			if err != nil {
-				return innerSummaryInfo, err
+		inodes = inodes[0:0]
+		keys = keys[0:0]
+		for _, xattrInfo := range xattrInfos {
+			if xattrInfo.XAttrs[SummaryKey] != "" {
+				summaryList := strings.Split(xattrInfo.XAttrs[SummaryKey], ",")
+				files, _ := strconv.ParseInt(summaryList[0], 10, 64)
+				subdirs, _ := strconv.ParseInt(summaryList[1], 10, 64)
+				fbytes, _ := strconv.ParseInt(summaryList[2], 10, 64)
+				summaryInfo.Files += files
+				summaryInfo.Subdirs += subdirs
+				summaryInfo.Fbytes += fbytes
 			}
-			summaryInfo.Files += innerSummaryInfo.Files
-			summaryInfo.Subdirs += innerSummaryInfo.Subdirs
-			summaryInfo.Fbytes += innerSummaryInfo.Fbytes
 		}
 	}
 
+	xattrInfos, err := mw.BatchGetXAttr(inodes, keys)
+	if err != nil {
+		return err
+	}
+	for _, xattrInfo := range xattrInfos {
+		if xattrInfo.XAttrs[SummaryKey] != "" {
+			summaryList := strings.Split(xattrInfo.XAttrs[SummaryKey], ",")
+			files, _ := strconv.ParseInt(summaryList[0], 10, 64)
+			subdirs, _ := strconv.ParseInt(summaryList[1], 10, 64)
+			fbytes, _ := strconv.ParseInt(summaryList[2], 10, 64)
+			summaryInfo.Files += files
+			summaryInfo.Subdirs += subdirs
+			summaryInfo.Fbytes += fbytes
+		}
+	}
+	return nil
+}
+
+
+func (mw *MetaWrapper) GetSummary_ll(parentIno uint64) (SummaryInfo, error) {
+	var summaryInfo SummaryInfo
+	sem := make(chan struct{}, 20)
+	ch := make(chan uint64, 40)
+	//stopCh := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go walker(mw, parentIno, ch, sem, &wg)
+	go func() {
+		wg.Wait()
+		//stopCh<- struct{}{}
+		close(ch)
+	}()
+
+	err := worker(mw, &summaryInfo, ch)
+	if err != nil {
+		return SummaryInfo{0,0,0}, err
+	}
 	return summaryInfo, nil
 }
 
@@ -1049,13 +1095,13 @@ func (mw *MetaWrapper) UpdateSummary_ll(parentIno uint64, filesInc int64, dirsIn
 }
 
 func (mw *MetaWrapper) RefreshSummary(parentIno uint64) error {
-	summaryXAttrInfo, err := mw.XAttrGet_ll(parentIno, "DirStat")
+	summaryXAttrInfo, err := mw.XAttrGet_ll(parentIno, SummaryKey)
 	if err != nil {
 		return err
 	}
 	var oldSummaryInfo SummaryInfo
-	if summaryXAttrInfo.XAttrs["DirStat"] != "" {
-		summaryList := strings.Split(summaryXAttrInfo.XAttrs["DirStat"], ",")
+	if summaryXAttrInfo.XAttrs[SummaryKey] != "" {
+		summaryList := strings.Split(summaryXAttrInfo.XAttrs[SummaryKey], ",")
 		files, _ := strconv.ParseInt(summaryList[0], 10, 64)
 		subdirs, _ := strconv.ParseInt(summaryList[1], 10, 64)
 		fbytes, _ := strconv.ParseInt(summaryList[2], 10, 64)

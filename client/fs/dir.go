@@ -458,7 +458,8 @@ func (d *Dir) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fus
 	var info *proto.XAttrInfo
 	var err error
 
-	if name == "DirStat" {
+	if name == meta.SummaryKey {
+
 		var summaryInfo meta.SummaryInfo
 		cacheSummaryInfo := d.super.sc.Get(ino)
 		if cacheSummaryInfo != nil {
@@ -529,7 +530,7 @@ func (d *Dir) Setxattr(ctx context.Context, req *fuse.SetxattrRequest) error {
 	ino := d.info.Inode
 	name := req.Name
 	value := req.Xattr
-	if name == "DirStat" {
+	if name == meta.SummaryKey {
 		err := errors.New("Set 'DirStat' is not supported.")
 		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
 		return nil
@@ -550,7 +551,7 @@ func (d *Dir) Removexattr(ctx context.Context, req *fuse.RemovexattrRequest) err
 	}
 	ino := d.info.Inode
 	name := req.Name
-	if name == "DirStat" {
+	if name == meta.SummaryKey {
 		err := errors.New("Remove 'DirStat' is not supported.")
 		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
 		return nil
