@@ -671,12 +671,19 @@ func cfs_batch_get_inodes(id C.int64_t, fd C.int, iids unsafe.Pointer, stats []C
 }
 
 //export cfs_refreshsummary
-func cfs_refreshsummary(id C.int64_t) C.int {
+func cfs_refreshsummary(id C.int64_t, path *C.char) C.int {
 	c, exist := getClient(int64(id))
 	if !exist {
 		return statusEINVAL
 	}
-	err := c.mw.RefreshSummary_ll(proto.RootIno)
+	info, err := c.lookupPath(c.absPath(C.GoString(path)))
+	var ino uint64
+	if err != nil {
+		ino = proto.RootIno
+	} else {
+		ino = info.Inode
+	}
+	err = c.mw.RefreshSummary_ll(ino)
 	if err != nil {
 		return errorToStatus(err)
 	}

@@ -1074,6 +1074,7 @@ func (mw *MetaWrapper) GetSummary_ll(parentIno uint64) (SummaryInfo, error) {
 	var currentGoroutineNum int32 = 0
 	wg.Add(1)
 	atomic.AddInt32(&currentGoroutineNum, 1)
+	ch <- parentIno
 	go walker(mw, parentIno, ch, &wg, &currentGoroutineNum, true)
 	go func() {
 		wg.Wait()
