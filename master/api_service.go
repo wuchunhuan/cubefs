@@ -1286,6 +1286,14 @@ func (m *Server) getNodeSetGrpInfoHandler(w http.ResponseWriter, r *http.Request
 	}
 	sendOkReply(w, r, newSuccessHTTPReply(info))
 }
+func (m *Server) getIsDomainOn(w http.ResponseWriter, r *http.Request) {
+	type SimpleDomainInfo struct {
+		DomainOn       bool
+	}
+	nsglStat := new(SimpleDomainInfo)
+	nsglStat.DomainOn = m.cluster.FaultDomain
+	sendOkReply(w, r, newSuccessHTTPReply(nsglStat))
+}
 
 // get metanode some interval params
 func (m *Server) getAllNodeSetGrpInfoHandler(w http.ResponseWriter, r *http.Request) {

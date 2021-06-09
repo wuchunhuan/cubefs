@@ -41,6 +41,7 @@ const (
 	AdminGetNodeInfo          = "/admin/getNodeInfo"
 	AdminGetAllNodeSetGrpInfo = "/admin/getNodeAllSetGrpInfo"
 	AdminGetNodeSetGrpInfo    = "/admin/getNodeSetGrpInfo"
+	AdminGetIsDomainOn    	  = "/admin/getIsDomainOn"
 	AdminUpdateNodeSetCapcity = "/admin/updateNodeSetCapcity"
 	AdminUpdateNodeSetId      = "/admin/updateNodeSetId"
 	AdminUpdateDataUseRatio   = "/admin/updateDataRatio"
