@@ -676,7 +676,7 @@ func cfs_refreshsummary(id C.int64_t) C.int {
 	if !exist {
 		return statusEINVAL
 	}
-	err := c.mw.RefreshSummary(proto.RootIno)
+	err := c.mw.RefreshSummary_ll(proto.RootIno)
 	if err != nil {
 		return errorToStatus(err)
 	}

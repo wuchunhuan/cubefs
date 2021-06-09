@@ -996,7 +996,11 @@ type SummaryInfo struct {
 
 func walker(mw *MetaWrapper, inode uint64, out chan<- uint64, sem chan struct{}, wg *sync.WaitGroup) {
 	sem <- struct{}{}
-	defer wg.Done()
+	defer func() {
+		<- sem
+		wg.Done()
+	}()
+
 	entries, err := mw.ReadDirOnly_ll(inode)
 	if err != nil {
 		return
@@ -1006,7 +1010,6 @@ func walker(mw *MetaWrapper, inode uint64, out chan<- uint64, sem chan struct{},
 		out <- entry.Inode
 		go walker(mw, entry.Inode, out, sem, wg)
 	}
-	<- sem
 }
 
 func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64) error {
@@ -1061,13 +1064,11 @@ func (mw *MetaWrapper) GetSummary_ll(parentIno uint64) (SummaryInfo, error) {
 	var summaryInfo SummaryInfo
 	sem := make(chan struct{}, 20)
 	ch := make(chan uint64, 40)
-	//stopCh := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go walker(mw, parentIno, ch, sem, &wg)
 	go func() {
 		wg.Wait()
-		//stopCh<- struct{}{}
 		close(ch)
 	}()
 
@@ -1094,10 +1095,25 @@ func (mw *MetaWrapper) UpdateSummary_ll(parentIno uint64, filesInc int64, dirsIn
 	return err
 }
 
-func (mw *MetaWrapper) RefreshSummary(parentIno uint64) error {
+func (mw *MetaWrapper) RefreshSummary_ll(parentIno uint64) error {
+	sem := make(chan struct{}, 20)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go mw.refreshSummary(parentIno, sem, &wg)
+	wg.Wait()
+	return nil
+}
+
+func (mw *MetaWrapper) refreshSummary(parentIno uint64, sem chan struct{}, wg *sync.WaitGroup) {
+	sem <- struct{}{}
+	defer func() {
+		<- sem
+		wg.Done()
+	}()
+
 	summaryXAttrInfo, err := mw.XAttrGet_ll(parentIno, SummaryKey)
 	if err != nil {
-		return err
+		return
 	}
 	var oldSummaryInfo SummaryInfo
 	if summaryXAttrInfo.XAttrs[SummaryKey] != "" {
@@ -1125,7 +1141,7 @@ func (mw *MetaWrapper) RefreshSummary(parentIno uint64) error {
 		} else {
 			fileInfo, err := mw.InodeGet_ll(dentry.Inode)
 			if err != nil {
-				return err
+				return
 			}
 			newSummaryInfo.Files += 1
 			newSummaryInfo.Fbytes += int64(fileInfo.Size)
@@ -1139,11 +1155,9 @@ func (mw *MetaWrapper) RefreshSummary(parentIno uint64) error {
 			newSummaryInfo.Subdirs-oldSummaryInfo.Subdirs,
 			newSummaryInfo.Fbytes-oldSummaryInfo.Fbytes)
 	}
+
 	for _, subdirIno := range subdirsList {
-		err = mw.RefreshSummary(subdirIno)
-		if err != nil {
-			return nil
-		}
+		wg.Add(1)
+		go mw.refreshSummary(subdirIno, sem, wg)
 	}
-	return nil
 }
