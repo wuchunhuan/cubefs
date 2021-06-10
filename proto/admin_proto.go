@@ -491,7 +491,7 @@ type SimpleVolView struct {
 	DpSelectorParm     string
 	DefaultZonePrior   bool
 }
-type SimpleNodeSet struct {
+type NodeSetInfo struct {
 	ID        uint64
 	ZoneName  string
 	Capacity  int
@@ -499,15 +499,15 @@ type SimpleNodeSet struct {
 	MetaUseRatio float64
 	MetaUsed  uint64
 	MetaTotal uint64
-	MetaNodes []NodeView
+	MetaNodes []*MetaNodeInfo
 	DataUsed  uint64
 	DataTotal uint64
-	DataNodes []NodeView
+	DataNodes []*DataNodeInfo
 }
 type SimpleNodeSetGrpInfo struct {
 	ID        uint64
 	Status    uint8
-	NodeSetInfo []SimpleNodeSet
+	NodeSetInfo []NodeSetInfo
 }
 
 type SimpleNodeSetGrpInfoList struct {
