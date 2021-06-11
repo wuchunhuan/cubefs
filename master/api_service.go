@@ -875,6 +875,7 @@ func (m *Server) getDataNode(w http.ResponseWriter, r *http.Request) {
 		Addr:                      dataNode.Addr,
 		ReportTime:                dataNode.ReportTime,
 		IsActive:                  dataNode.isActive,
+		IsWriteAble:               dataNode.isWriteAble(),
 		UsageRatio:                dataNode.UsageRatio,
 		SelectedTimes:             dataNode.SelectedTimes,
 		Carry:                     dataNode.Carry,
@@ -1144,13 +1145,12 @@ func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
 				Addr:                      node.Addr,
 				ReportTime:                node.ReportTime,
 				IsActive:                  node.isActive,
+				IsWriteAble:               node.isWriteAble(),
 				UsageRatio:                node.UsageRatio,
 				SelectedTimes:             node.SelectedTimes,
 				Carry:                     node.Carry,
 				DataPartitionCount:        node.DataPartitionCount,
 				NodeSetID:                 node.NodeSetID,
-				PersistenceDataPartitions: node.PersistenceDataPartitions,
-				BadDisks:                  node.BadDisks,
 			}
 			nsStat.DataNodes = append(nsStat.DataNodes, dataNodeInfo)
 			return true
@@ -1168,6 +1168,7 @@ func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
 				ID:                        node.ID,
 				Addr:                      node.Addr,
 				IsActive:                  node.IsActive,
+				IsWriteAble:               node.isWritable(),
 				ZoneName:                  node.ZoneName,
 				MaxMemAvailWeight:         node.MaxMemAvailWeight,
 				Total:                     node.Total,
@@ -1539,6 +1540,7 @@ func (m *Server) getMetaNode(w http.ResponseWriter, r *http.Request) {
 		ID:                        metaNode.ID,
 		Addr:                      metaNode.Addr,
 		IsActive:                  metaNode.IsActive,
+		IsWriteAble:               metaNode.isWritable(),
 		ZoneName:                  metaNode.ZoneName,
 		MaxMemAvailWeight:         metaNode.MaxMemAvailWeight,
 		Total:                     metaNode.Total,
