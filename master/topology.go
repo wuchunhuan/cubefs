@@ -453,12 +453,12 @@ func (nsgm *nodeSetGrpManager) getHostFromNodeSetGrpSpecific(replicaNum uint8, c
 		nsgIndex = (nsgIndex+1) % len(nsgm.nodeSetGrpMap)
 		nsg :=  nsgm.nodeSetGrpMap[nsgIndex]
 
-		var (
-			host []string
-			peer []proto.Peer
-		)
-
-		for n :=0; n < int(replicaNum); n++ {
+		needReplicaNumArray := [3]int{1,2,3}
+		for _, needReplicaNum := range needReplicaNumArray {
+			var (
+				host []string
+				peer []proto.Peer
+			)
 			// every replica will look around every nodeset and break if get one
 			for i := 0; i < defaultFaultDomainZoneCnt; i++ {
 				ns := nsg.nodeSets[nsg.nsgInnerIndex]
@@ -466,36 +466,35 @@ func (nsgm *nodeSetGrpManager) getHostFromNodeSetGrpSpecific(replicaNum uint8, c
 				log.LogInfof("action[getHostFromNodeSetGrpSpecfic]  nodesetid[%v],zonename[%v], datanode len[%v],metanode len[%v],capcity[%v]",
 					ns.ID, ns.zoneName, ns.dataNodeLen(), ns.metaNodeLen(), ns.Capacity)
 
+				needNum := needReplicaNum
+				if needReplicaNum > int(replicaNum)-len(hosts) {
+					needNum = int(replicaNum)-len(hosts)
+				}
+
 				if createType == TypeDataPartion {
-					if host, peer, err = ns.getAvailDataNodeHosts(nil, 1); err != nil {
+					if host, peer, err = ns.getAvailDataNodeHosts(nil, needNum); err != nil {
 						log.LogErrorf("action[getHostFromNodeSetGrpSpecfic] ns[%v] zone[%v] TypeDataPartion err[%v]", ns.ID, ns.zoneName, err)
 						//nsg.status = dataNodesUnavaliable
 						continue
 					}
 				} else {
-					if host, peer, err = ns.getAvailMetaNodeHosts(nil, 1); err != nil {
+					if host, peer, err = ns.getAvailMetaNodeHosts(nil, needNum); err != nil {
 						log.LogErrorf("action[getHostFromNodeSetGrpSpecfic]  ns[%v] zone[%v] TypeMetaPartion err[%v]", ns.ID, ns.zoneName, err)
 						//nsg.status = metaNodesUnavaliable
 						continue
 					}
 				}
-				hosts = append(hosts, host[0])
-				peers = append(peers, peer[0])
-				log.LogInfof("action[getHostFromNodeSetGrpSpecfic]  get host[%v] peer[%v], nsg id[%v] nsgInnerIndex[%v]", host[0], peer[0], nsg.ID, nsg.nsgInnerIndex)
-				break
+				hosts = append(hosts, host...)
+				peers = append(peers, peer...)
+				if int(replicaNum) == len(hosts) {
+					log.LogInfof("action[getHostFromNodeSetGrpSpecfic]  ngGrp[%v] unable support type[%v] replicaNum[%v]", nsg.ID, createType, replicaNum)
+					return
+				}
 			}
-			// break if host not found
-			if n + 1 != len(hosts) {
-				log.LogInfof("action[getHostFromNodeSetGrpSpecfic]  ngGrp[%v] unable support type[%v] replicaNum[%v]", nsg.ID, createType, replicaNum)
-				break
-			}
+			hosts = nil
+			peers = nil
 		}
-		if int(replicaNum) == len(hosts) {
-			log.LogErrorf("action[getHostFromNodeSetGrpSpecfic] success get hosts[%v] peers[%v]", hosts, peers)
-			return
-		}
-		hosts = nil
-		peers = nil
+
 	}
 
 	return nil, nil, fmt.Errorf("action[getHostFromNodeSetGrpSpecfic] cann't alloc host")
