@@ -260,7 +260,7 @@ func (m *Server) registerAPIRoutes(router *mux.Router) {
 		Path(proto.AdminUpdateNodeSetId).
 		HandlerFunc(m.updateNodeSetIdHandler)
 	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
-		Path(proto.AdminUpdateDataUseRatio).
+		Path(proto.AdminUpdateDomainDataUseRatio).
 		HandlerFunc(m.updateDataUseRatioHandler)
 	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
 		Path(proto.AdminUpdateZoneExcludeRatio).
