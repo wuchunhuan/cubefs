@@ -224,8 +224,8 @@ func newNodeSetGrpManager(cls *Cluster) *nodeSetGrpManager {
 		nsId2NsGrpMap:         make(map[uint64]int),
 		excludeZoneListDomain: make(map[string]int),
 		nsIdMap:               make(map[uint64]int),
-		dataRatioLimit:        defaultDataPartitionUsageThreshold,
-		excludeZoneUseRatio:   defaultDataPartitionUsageThreshold,
+		dataRatioLimit:        defaultDomainUsageThreshold,
+		excludeZoneUseRatio:   defaultZoneUsageThreshold,
 	}
 	return ns
 }
@@ -250,7 +250,7 @@ func (nsgm *nodeSetGrpManager) checkExcludeZoneState() {
 			log.LogInfof("action[checkExcludeZoneState] zone name[%v],status[%v], index for datanode[%v],index for metanode[%v]",
 				zone.name, zone.status, zone.setIndexForDataNode, zone.setIndexForMetaNode)
 			if nsgm.excludeZoneUseRatio == 0 || nsgm.excludeZoneUseRatio > 1 {
-				nsgm.excludeZoneUseRatio = defaultDataPartitionUsageThreshold
+				nsgm.excludeZoneUseRatio = defaultZoneUsageThreshold
 			}
 			if zone.isUsedRatio(nsgm.excludeZoneUseRatio) {
 				if zone.status == normalZone {
@@ -404,8 +404,14 @@ func (nsgm *nodeSetGrpManager) buildNodeSetGrp() (err error) {
 		zoneCnt = 3
 	}
 	if zoneCnt > len(nsgm.zoneAvailableNodeSet) {
-		log.LogInfof("action[buildNodeSetGrp] zoncnt [%v]", zoneCnt)
-		zoneCnt = len(nsgm.zoneAvailableNodeSet)
+		if nsgm.c.cfg.DomainBuildAsPossible {
+			log.LogInfof("action[buildNodeSetGrp] zoncnt [%v]", zoneCnt)
+			zoneCnt = len(nsgm.zoneAvailableNodeSet)
+		} else {
+			err = fmt.Errorf("action[buildNodeSetGrp] failed zone avaliable [%v] need [%v]", zoneCnt, len(nsgm.zoneAvailableNodeSet))
+			log.LogErrorf("[%v]", err)
+			return
+		}
 	}
 	for {
 		log.LogInfof("action[buildNodeSetGrp] zoneCnt [%v] step [%v]", zoneCnt, step)

@@ -178,6 +178,8 @@ func (m *Server) checkConfig(cfg *config.Config) (err error) {
 	if m.config.nodeSetCapacity < 3{
 		m.config.nodeSetCapacity = defaultNodeSetCapacity
 	}
+
+	m.config.DomainBuildAsPossible = cfg.GetBoolWithDefault(cfgDomainBuildAsPossible, false)
 	m.config.DomainNodeGrpBatchCnt = defaultNodeSetGrpBatchCnt
 	domainBatchGrpCnt := cfg.GetString(cfgDomainBatchGrpCnt)
 	if domainBatchGrpCnt != "" {
@@ -185,7 +187,6 @@ func (m *Server) checkConfig(cfg *config.Config) (err error) {
 			return fmt.Errorf("%v,err:%v", proto.ErrInvalidCfg, err.Error())
 		}
 	}
-
 
 	metaNodeReservedMemory := cfg.GetString(cfgMetaNodeReservedMem)
 	if metaNodeReservedMemory != "" {
