@@ -562,13 +562,14 @@ func (mw *MetaWrapper) AppendExtentKey(parentInode, inode uint64, ek proto.Exten
 	}
 	log.LogDebugf("AppendExtentKey: ino(%v) ek(%v) discard(%v)", inode, ek, discard)
 
-	newInfo, _ := mw.InodeGet_ll(inode)
-
-	if oldInfo != nil {
-		if int64(oldInfo.Size) < int64(newInfo.Size) {
-			go mw.UpdateSummary_ll(parentInode, 0, 0, int64(newInfo.Size) - int64(oldInfo.Size))
+	go func() {
+		newInfo, _ := mw.InodeGet_ll(inode)
+		if oldInfo != nil && newInfo != nil {
+			if int64(oldInfo.Size) < int64(newInfo.Size) {
+				go mw.UpdateSummary_ll(parentInode, 0, 0, int64(newInfo.Size) - int64(oldInfo.Size))
+			}
 		}
-	}
+	}()
 
 	return nil
 }
@@ -998,6 +999,12 @@ type SummaryInfo struct {
 }
 
 func walker(mw *MetaWrapper, inode uint64, out chan<- uint64, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool) {
+	defer func() {
+		if newGoroutine {
+			atomic.AddInt32(currentGoroutineNum, -1)
+			wg.Done()
+		}
+	}()
 	entries, err := mw.ReadDirOnly_ll(inode)
 	if err != nil {
 		return
@@ -1012,10 +1019,6 @@ func walker(mw *MetaWrapper, inode uint64, out chan<- uint64, wg *sync.WaitGroup
 			out <- entry.Inode
 			walker(mw, entry.Inode, out, wg, currentGoroutineNum, false)
 		}
-	}
-	if newGoroutine {
-		atomic.AddInt32(currentGoroutineNum, -1)
-		wg.Done()
 	}
 }
 
@@ -1088,33 +1091,41 @@ func (mw *MetaWrapper) GetSummary_ll(parentIno uint64) (SummaryInfo, error) {
 	return summaryInfo, nil
 }
 
-func (mw *MetaWrapper) UpdateSummary_ll(parentIno uint64, filesInc int64, dirsInc int64, bytesInc int64) error {
-	var err error
+func (mw *MetaWrapper) UpdateSummary_ll(parentIno uint64, filesInc int64, dirsInc int64, bytesInc int64) {
+	if filesInc == 0 && dirsInc == 0 && bytesInc == 0 {
+		return
+	}
 	mp := mw.getPartitionByInode(parentIno)
 	if mp == nil {
 		log.LogErrorf("UpdateSummary_ll: no such partition, inode(%v)", parentIno)
-		return syscall.ENOENT
+		return
 	}
 	for cnt := 0; cnt < UpdateSummaryRetry; cnt++ {
-		err = mw.updateXAttrs(mp, parentIno, filesInc, dirsInc, bytesInc)
+		err := mw.updateXAttrs(mp, parentIno, filesInc, dirsInc, bytesInc)
 		if err == nil {
-			return nil
+			return
 		}
 	}
-	return err
+	return
 }
 
-func (mw *MetaWrapper) RefreshSummary_ll(parentIno uint64) error {
+func (mw *MetaWrapper) RefreshSummary_ll(parentIno uint64) {
 	var wg sync.WaitGroup
 	var currentGoroutineNum int32 = 0
 	wg.Add(1)
 	atomic.AddInt32(&currentGoroutineNum, 1)
 	go mw.refreshSummary(parentIno, &wg, &currentGoroutineNum, true)
 	wg.Wait()
-	return nil
+	return
 }
 
-func (mw *MetaWrapper) refreshSummary(parentIno uint64, wg *sync.WaitGroup, currentGoroutineNum *int32,newGoroutine bool) {
+func (mw *MetaWrapper) refreshSummary(parentIno uint64, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool) {
+	defer func() {
+		if newGoroutine {
+			atomic.AddInt32(currentGoroutineNum, -1)
+			wg.Done()
+		}
+	}()
 	summaryXAttrInfo, err := mw.XAttrGet_ll(parentIno, SummaryKey)
 	if err != nil {
 		return
@@ -1151,14 +1162,10 @@ func (mw *MetaWrapper) refreshSummary(parentIno uint64, wg *sync.WaitGroup, curr
 			newSummaryInfo.Fbytes += int64(fileInfo.Size)
 		}
 	}
-	if newSummaryInfo.Fbytes != oldSummaryInfo.Fbytes ||
-		newSummaryInfo.Files != oldSummaryInfo.Files ||
-		newSummaryInfo.Subdirs != oldSummaryInfo.Subdirs {
-		mw.UpdateSummary_ll(parentIno,
+	go mw.UpdateSummary_ll(parentIno,
 			newSummaryInfo.Files-oldSummaryInfo.Files,
 			newSummaryInfo.Subdirs-oldSummaryInfo.Subdirs,
 			newSummaryInfo.Fbytes-oldSummaryInfo.Fbytes)
-	}
 
 	for _, subdirIno := range subdirsList {
 		if atomic.LoadInt32(currentGoroutineNum) < MaxSummaryGoroutineNum {
@@ -1168,9 +1175,5 @@ func (mw *MetaWrapper) refreshSummary(parentIno uint64, wg *sync.WaitGroup, curr
 		} else {
 			mw.refreshSummary(subdirIno, wg, currentGoroutineNum, false)
 		}
-	}
-	if newGoroutine {
-		atomic.AddInt32(currentGoroutineNum, -1)
-		wg.Done()
 	}
 }

@@ -683,10 +683,7 @@ func cfs_refreshsummary(id C.int64_t, path *C.char) C.int {
 	} else {
 		ino = info.Inode
 	}
-	err = c.mw.RefreshSummary_ll(ino)
-	if err != nil {
-		return errorToStatus(err)
-	}
+	c.mw.RefreshSummary_ll(ino)
 	return statusOK
 }
 
