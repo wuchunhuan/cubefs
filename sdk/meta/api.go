@@ -566,7 +566,7 @@ func (mw *MetaWrapper) AppendExtentKey(parentInode, inode uint64, ek proto.Exten
 		newInfo, _ := mw.InodeGet_ll(inode)
 		if oldInfo != nil && newInfo != nil {
 			if int64(oldInfo.Size) < int64(newInfo.Size) {
-				go mw.UpdateSummary_ll(parentInode, 0, 0, int64(newInfo.Size) - int64(oldInfo.Size))
+				mw.UpdateSummary_ll(parentInode, 0, 0, int64(newInfo.Size) - int64(oldInfo.Size))
 			}
 		}
 	}()
