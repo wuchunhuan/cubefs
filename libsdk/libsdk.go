@@ -683,7 +683,10 @@ func cfs_refreshsummary(id C.int64_t, path *C.char) C.int {
 	} else {
 		ino = info.Inode
 	}
-	c.mw.RefreshSummary_ll(ino)
+	err = c.mw.RefreshSummary_ll(ino)
+	if err != nil {
+		return errorToStatus(err)
+	}
 	return statusOK
 }
 
@@ -714,7 +717,7 @@ func cfs_getsummary(id C.int64_t, path *C.char, summary *C.struct_cfs_summary_in
 	}
 	summaryInfo, err := c.mw.GetSummary_ll(info.Inode)
 	if err != nil {
-		return statusEIO
+		return errorToStatus(err)
 	}
 	if strings.ToLower(C.GoString(useCache)) != "false" {
 		c.sc.Put(info.Inode, &summaryInfo)

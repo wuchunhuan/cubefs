@@ -998,7 +998,7 @@ type SummaryInfo struct {
 	Fbytes  int64
 }
 
-func walker(mw *MetaWrapper, inode uint64, out chan<- uint64, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool) {
+func walker(mw *MetaWrapper, inode uint64, out chan<- uint64, errch chan<- error, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool) {
 	defer func() {
 		if newGoroutine {
 			atomic.AddInt32(currentGoroutineNum, -1)
@@ -1007,6 +1007,7 @@ func walker(mw *MetaWrapper, inode uint64, out chan<- uint64, wg *sync.WaitGroup
 	}()
 	entries, err := mw.ReadDirOnly_ll(inode)
 	if err != nil {
+		errch <- err
 		return
 	}
 	for _, entry := range entries {
@@ -1014,15 +1015,15 @@ func walker(mw *MetaWrapper, inode uint64, out chan<- uint64, wg *sync.WaitGroup
 			wg.Add(1)
 			atomic.AddInt32(currentGoroutineNum, 1)
 			out <- entry.Inode
-			go walker(mw, entry.Inode, out, wg, currentGoroutineNum, true)
+			go walker(mw, entry.Inode, out, errch, wg, currentGoroutineNum, true)
 		} else {
 			out <- entry.Inode
-			walker(mw, entry.Inode, out, wg, currentGoroutineNum, false)
+			walker(mw, entry.Inode, out, errch, wg, currentGoroutineNum, false)
 		}
 	}
 }
 
-func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64) error {
+func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64, errch chan<- error) {
 	var inodes []uint64
 	var keys []string
 	for inode := range in {
@@ -1033,7 +1034,8 @@ func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64) error {
 		}
 		xattrInfos, err := mw.BatchGetXAttr(inodes, keys)
 		if err != nil {
-			return err
+			errch <- err
+			return
 		}
 
 		inodes = inodes[0:0]
@@ -1053,7 +1055,8 @@ func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64) error {
 
 	xattrInfos, err := mw.BatchGetXAttr(inodes, keys)
 	if err != nil {
-		return err
+		errch <- err
+		return
 	}
 	for _, xattrInfo := range xattrInfos {
 		if xattrInfo.XAttrs[SummaryKey] != "" {
@@ -1066,26 +1069,27 @@ func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64) error {
 			summaryInfo.Fbytes += fbytes
 		}
 	}
-	return nil
+	close(errch)
+	return
 }
 
 
 func (mw *MetaWrapper) GetSummary_ll(parentIno uint64) (SummaryInfo, error) {
 	var summaryInfo SummaryInfo
 	ch := make(chan uint64, 40)
+	errch := make(chan error)
 	var wg sync.WaitGroup
 	var currentGoroutineNum int32 = 0
 	wg.Add(1)
 	atomic.AddInt32(&currentGoroutineNum, 1)
 	ch <- parentIno
-	go walker(mw, parentIno, ch, &wg, &currentGoroutineNum, true)
+	go walker(mw, parentIno, ch, errch, &wg, &currentGoroutineNum, true)
 	go func() {
 		wg.Wait()
 		close(ch)
 	}()
-
-	err := worker(mw, &summaryInfo, ch)
-	if err != nil {
+	go worker(mw, &summaryInfo, ch, errch)
+	for err := range errch {
 		return SummaryInfo{0,0,0}, err
 	}
 	return summaryInfo, nil
@@ -1109,17 +1113,24 @@ func (mw *MetaWrapper) UpdateSummary_ll(parentIno uint64, filesInc int64, dirsIn
 	return
 }
 
-func (mw *MetaWrapper) RefreshSummary_ll(parentIno uint64) {
+func (mw *MetaWrapper) RefreshSummary_ll(parentIno uint64) error {
 	var wg sync.WaitGroup
 	var currentGoroutineNum int32 = 0
+	errch := make(chan error)
 	wg.Add(1)
 	atomic.AddInt32(&currentGoroutineNum, 1)
-	go mw.refreshSummary(parentIno, &wg, &currentGoroutineNum, true)
-	wg.Wait()
-	return
+	go mw.refreshSummary(parentIno, errch, &wg, &currentGoroutineNum, true)
+	go func() {
+		wg.Wait()
+		close(errch)
+	}()
+	for err := range errch {
+		return err
+	}
+	return nil
 }
 
-func (mw *MetaWrapper) refreshSummary(parentIno uint64, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool) {
+func (mw *MetaWrapper) refreshSummary(parentIno uint64, errch chan<- error, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool) {
 	defer func() {
 		if newGoroutine {
 			atomic.AddInt32(currentGoroutineNum, -1)
@@ -1128,6 +1139,7 @@ func (mw *MetaWrapper) refreshSummary(parentIno uint64, wg *sync.WaitGroup, curr
 	}()
 	summaryXAttrInfo, err := mw.XAttrGet_ll(parentIno, SummaryKey)
 	if err != nil {
+		errch <- err
 		return
 	}
 	var oldSummaryInfo SummaryInfo
@@ -1156,6 +1168,7 @@ func (mw *MetaWrapper) refreshSummary(parentIno uint64, wg *sync.WaitGroup, curr
 		} else {
 			fileInfo, err := mw.InodeGet_ll(dentry.Inode)
 			if err != nil {
+				errch <- err
 				return
 			}
 			newSummaryInfo.Files += 1
@@ -1171,9 +1184,9 @@ func (mw *MetaWrapper) refreshSummary(parentIno uint64, wg *sync.WaitGroup, curr
 		if atomic.LoadInt32(currentGoroutineNum) < MaxSummaryGoroutineNum {
 			wg.Add(1)
 			atomic.AddInt32(currentGoroutineNum, 1)
-			go mw.refreshSummary(subdirIno, wg, currentGoroutineNum, true)
+			go mw.refreshSummary(subdirIno, errch, wg, currentGoroutineNum, true)
 		} else {
-			mw.refreshSummary(subdirIno, wg, currentGoroutineNum, false)
+			mw.refreshSummary(subdirIno, errch, wg, currentGoroutineNum, false)
 		}
 	}
 }
