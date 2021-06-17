@@ -175,11 +175,12 @@ func (c *Cluster) scheduleToCheckVolStatus() {
 }
 
 func (c *Cluster) scheduleToCheckNodeSetGrpManagerStatus() {
-	if c.FaultDomain == false || !c.partition.IsRaftLeader() {
-		return
-	}
 	go func() {
 		for {
+			if c.FaultDomain == false || !c.partition.IsRaftLeader() {
+				time.Sleep(time.Minute)
+				continue
+			}
 			c.nodeSetGrpManager.checkGrpState()
 			c.nodeSetGrpManager.checkExcludeZoneState()
 
@@ -469,12 +470,15 @@ func (c *Cluster) updateMetaNodeBaseInfo(nodeAddr string, id uint64) (err error)
 	return
 }
 
-func (c *Cluster) addMetaNode(nodeAddr, zoneName string) (id uint64, err error) {
+func (c *Cluster) addMetaNode(nodeAddr, zoneName string, nodesetId uint64) (id uint64, err error) {
 	c.mnMutex.Lock()
 	defer c.mnMutex.Unlock()
 	var metaNode *MetaNode
 	if value, ok := c.metaNodes.Load(nodeAddr); ok {
 		metaNode = value.(*MetaNode)
+		if nodesetId > 0 && nodesetId != metaNode.ID {
+			return metaNode.ID, fmt.Errorf("addr already in nodeset [%v]", nodeAddr)
+		}
 		return metaNode.ID, nil
 	}
 	metaNode = newMetaNode(nodeAddr, zoneName, c.Name)
@@ -482,10 +486,17 @@ func (c *Cluster) addMetaNode(nodeAddr, zoneName string) (id uint64, err error) 
 	if err != nil {
 		zone = c.t.putZoneIfAbsent(newZone(zoneName))
 	}
-	ns := zone.getAvailNodeSetForMetaNode()
-	if ns == nil {
-		if ns, err = zone.createNodeSet(c); err != nil {
-			goto errHandler
+	var ns *nodeSet
+	if nodesetId > 0 {
+		if ns, err = zone.getNodeSet(nodesetId); err != nil {
+			return nodesetId, err
+		}
+	} else {
+		ns = zone.getAvailNodeSetForMetaNode()
+		if ns == nil {
+			if ns, err = zone.createNodeSet(c); err != nil {
+				goto errHandler
+			}
 		}
 	}
 
@@ -517,12 +528,15 @@ errHandler:
 	return
 }
 
-func (c *Cluster) addDataNode(nodeAddr, zoneName string) (id uint64, err error) {
+func (c *Cluster) addDataNode(nodeAddr, zoneName string, nodesetId uint64) (id uint64, err error) {
 	c.dnMutex.Lock()
 	defer c.dnMutex.Unlock()
 	var dataNode *DataNode
 	if node, ok := c.dataNodes.Load(nodeAddr); ok {
 		dataNode = node.(*DataNode)
+		if nodesetId > 0 && nodesetId != dataNode.NodeSetID {
+			return dataNode.ID, fmt.Errorf("addr already in nodeset [%v]", nodeAddr)
+		}
 		return dataNode.ID, nil
 	}
 
@@ -531,10 +545,17 @@ func (c *Cluster) addDataNode(nodeAddr, zoneName string) (id uint64, err error) 
 	if err != nil {
 		zone = c.t.putZoneIfAbsent(newZone(zoneName))
 	}
-	ns := zone.getAvailNodeSetForDataNode()
-	if ns == nil {
-		if ns, err = zone.createNodeSet(c); err != nil {
-			goto errHandler
+	var ns *nodeSet
+	if nodesetId > 0 {
+		if ns, err = zone.getNodeSet(nodesetId); err != nil {
+			return nodesetId, err
+		}
+	} else {
+		ns = zone.getAvailNodeSetForDataNode()
+		if ns == nil {
+			if ns, err = zone.createNodeSet(c); err != nil {
+				goto errHandler
+			}
 		}
 	}
 	// allocate dataNode id
@@ -691,7 +712,12 @@ func (c *Cluster) batchCreateDataPartition(vol *Vol, reqCount int) (err error) {
 		if c.DisableAutoAllocate {
 			return
 		}
-		if _, err = c.createDataPartition(vol.Name); err != nil {
+		zoneNum := c.decideZoneNum(vol.crossZone)
+		//most of partitions are replicated across 3 zones,but a few partitions are replicated across 2 zones
+		if vol.crossZone && i%5 == 0 {
+			zoneNum = 2
+		}
+		if _, err = c.createDataPartition(vol.Name, zoneNum); err != nil {
 			log.LogErrorf("action[batchCreateDataPartition] after create [%v] data partition,occurred error,err[%v]", i, err)
 			break
 		}
@@ -699,9 +725,28 @@ func (c *Cluster) batchCreateDataPartition(vol *Vol, reqCount int) (err error) {
 	return
 }
 func (c *Cluster) isFaultDomain( vol *Vol) bool{
-	return c.FaultDomain  &&
-		( (!vol.crossZone && c.needFaultDomain) ||
-				(vol.crossZone && (!vol.defaultPriority ||(vol.defaultPriority && c.needFaultDomain))) )
+	var specifyZoneNeedDomain bool
+	if c.FaultDomain && !vol.crossZone && !c.needFaultDomain {
+		if value, ok := c.t.zoneMap.Load(vol.zoneName); ok{
+			if value.(*Zone).status == unavailableZone {
+				specifyZoneNeedDomain = true
+			}
+		}
+	}
+	log.LogInfof("action[isFaultDomain] vol [%v] zoname [%v] FaultDomain[%v] need fault domain[%v] vol crosszone[%v] default[%v] specifyZoneNeedDomain[%v] domainOn[%v]",
+		vol.Name, vol.zoneName, c.FaultDomain,c.needFaultDomain,vol.crossZone, vol.defaultPriority, specifyZoneNeedDomain, vol.domainOn)
+	domainOn :=  c.FaultDomain  &&
+		(vol.domainOn ||
+			(!vol.crossZone && c.needFaultDomain) || specifyZoneNeedDomain ||
+				(vol.crossZone && (!vol.defaultPriority ||
+										(vol.defaultPriority && (c.needFaultDomain || len(c.t.domainExcludeZones) <= 1)))))
+	if !vol.domainOn && domainOn{
+		vol.domainOn = domainOn
+		vol.updateViewCache(c)
+		c.syncUpdateVol(vol)
+		log.LogInfof("action[isFaultDomain] vol [%v] set domainOn", vol.Name)
+	}
+	return vol.domainOn
 }
 // Synchronously create a data partition.
 // 1. Choose one of the available data nodes.
@@ -709,7 +754,7 @@ func (c *Cluster) isFaultDomain( vol *Vol) bool{
 // 3. Communicate with the data node to synchronously create a data partition.
 // - If succeeded, replicate the data through raft and persist it to RocksDB.
 // - Otherwise, throw errors
-func (c *Cluster) createDataPartition(volName string) (dp *DataPartition, err error) {
+func (c *Cluster) createDataPartition(volName string, zoneNum int) (dp *DataPartition, err error) {
 	var (
 		vol         *Vol
 		partitionID uint64
@@ -730,7 +775,6 @@ func (c *Cluster) createDataPartition(volName string) (dp *DataPartition, err er
 			goto errHandler
 		}
 	} else {
-		zoneNum := c.decideZoneNum(vol.crossZone)
 		if targetHosts, targetPeers, err = c.chooseTargetDataNodes("", nil, nil, int(vol.dpReplicaNum), zoneNum, vol.zoneName); err != nil {
 			goto errHandler
 		}
@@ -840,7 +884,9 @@ func (c *Cluster) decideZoneNum(crossZone bool) (zoneNum int) {
 	return zoneNum
 }
 
-func (c *Cluster) chooseTargetDataNodes(excludeZone string, excludeNodeSets []uint64, excludeHosts []string, replicaNum int, zoneNum int, specifiedZone string) (hosts []string, peers []proto.Peer, err error) {
+func (c *Cluster) chooseTargetDataNodes(excludeZone string, excludeNodeSets []uint64,
+					excludeHosts []string, replicaNum int,
+					zoneNum int, specifiedZone string) (hosts []string, peers []proto.Peer, err error) {
 
 	var (
 		masterZone *Zone
@@ -1562,6 +1608,7 @@ func (c *Cluster) updateVol(name, authKey string, newArgs *VolVarargs) (err erro
 		oldDpSelectorName string
 		oldDpSelectorParm string
 		volUsedSpace      uint64
+		newZoneName       string
 	)
 	if vol, err = c.getVol(name); err != nil {
 		log.LogErrorf("action[updateVol] err[%v]", err)
@@ -1586,17 +1633,10 @@ func (c *Cluster) updateVol(name, authKey string, newArgs *VolVarargs) (err erro
 		goto errHandler
 	}
 
-	if vol.crossZone && newArgs.zoneName != "" {
-		err = fmt.Errorf("only the vol which don't across zones,can specified zoneName")
+	if newZoneName, err = c.checkVolInfo(name, vol.crossZone, newArgs.zoneName); err != nil {
 		goto errHandler
 	}
-	if newArgs.zoneName != "" {
-		_, err = c.t.getZone(newArgs.zoneName)
-		if err != nil {
-			goto errHandler
-		}
-	}
-
+	newArgs.zoneName = newZoneName
 	oldCapacity = vol.Capacity
 	oldDpReplicaNum = vol.dpReplicaNum
 	oldFollowerRead = vol.FollowerRead
@@ -1642,6 +1682,50 @@ errHandler:
 	return
 }
 
+func (c *Cluster) checkVolInfo(name string, crossZone bool, zoneName string) (newZoneName string, err error){
+	newZoneName = zoneName
+	if crossZone {
+		//
+		if c.t.zoneLen() <= 1 && !c.FaultDomain{
+			return newZoneName, fmt.Errorf("action[checkVolInfo] cluster has one zone,can't cross zone")
+		}
+		if newZoneName != "" {
+			return newZoneName, fmt.Errorf("action[checkVolInfo] only the vol which don't across zones,can specified zoneName")
+		}
+	} else {
+		// len(c.t.zones) is 0, or set false in check status
+		if newZoneName == ""{
+			if  !c.needFaultDomain {
+				if _,err = c.t.getZone(DefaultZoneName); err != nil {
+					return newZoneName, fmt.Errorf("action[checkVolInfo] the vol is not cross zone and didn't set zone name,but there's no default zone")
+				}
+				log.LogInfof("action[checkVolInfo] vol [%v] use default zone", name)
+				newZoneName = DefaultZoneName
+			}
+		} else {
+			if c.FaultDomain {
+				var isExcludeZone bool
+				// zonename should be in old zones and be excluded from domain
+				for i := 0; i < len(c.t.domainExcludeZones); i++ {
+					if newZoneName == c.t.domainExcludeZones[i] {
+						isExcludeZone = true
+						break
+					}
+				}
+				if !isExcludeZone {
+					return newZoneName, fmt.Errorf("action[checkVolInfo] the zonename[%v] not execluded domain name.should not be assigned")
+				}
+			} else {
+				if _,err = c.t.getZone(newZoneName); err != nil {
+					return newZoneName, fmt.Errorf("action[checkVolInfo] the vol is not cross zone and didn't set zone name,but there's no default zone")
+				}
+			}
+			// todo
+		}
+	}
+	return
+}
+
 // Create a new volume.
 // By default we create 3 meta partitions and 10 data partitions during initialization.
 func (c *Cluster) createVol(name, owner, zoneName, description string,
@@ -1650,26 +1734,23 @@ func (c *Cluster) createVol(name, owner, zoneName, description string,
 	var (
 		dataPartitionSize       uint64
 		readWriteDataPartitions int
+		newZoneName             string
 	)
 	if size * util.GB < util.DefaultDataPartitionSize {
 		dataPartitionSize = util.DefaultDataPartitionSize
 	} else {
 		dataPartitionSize = uint64(size) * util.GB
 	}
-
-	if crossZone && c.t.zoneLen() <= 1 {
-		return nil, fmt.Errorf("cluster has one zone,can't cross zone")
-	}
-	if crossZone && zoneName != "" {
-		return nil, fmt.Errorf("only the vol which don't across zones,can specified zoneName")
-	}
 	if zoneName != "" {
 		if _, err = c.t.getZone(zoneName); err != nil {
 			return
 		}
-	} else if !crossZone {
-		zoneName = DefaultZoneName
 	}
+
+	if newZoneName, err = c.checkVolInfo(name, crossZone, zoneName); err != nil {
+		return
+	}
+	zoneName = newZoneName
 	if vol, err = c.doCreateVol(name, owner, zoneName, description,
 						dataPartitionSize, uint64(capacity), dpReplicaNum,
 						followerRead, authenticate, crossZone,
@@ -1688,6 +1769,10 @@ func (c *Cluster) createVol(name, owner, zoneName, description string,
 	for retryCount := 0; readWriteDataPartitions < defaultInitDataPartitionCnt && retryCount < 3; retryCount++ {
 		_ = vol.initDataPartitions(c)
 		readWriteDataPartitions = len(vol.dataPartitions.partitionMap)
+	}
+	if len(vol.dataPartitions.partitionMap) <= defaultReplicaNum {
+		err = fmt.Errorf("action[createVol]  initDataPartitions failed")
+		goto errHandler
 	}
 	vol.dataPartitions.readableAndWritableCnt = readWriteDataPartitions
 	vol.updateViewCache(c)
@@ -1770,7 +1855,7 @@ func (c *Cluster) updateInodeIDRange(volName string, start uint64) (err error) {
 
 // Choose the target hosts from the available zones and meta nodes.
 func (c *Cluster) chooseTargetMetaHosts(
-			excludeZone string, excludeNodeSets []uint64,
+			excludeZone []string, excludeNodeSets []uint64,
 			excludeHosts []string, replicaNum int,
 			crossZone bool,
 			specifiedZone string) (hosts []string, peers []proto.Peer, err error) {
@@ -1779,8 +1864,8 @@ func (c *Cluster) chooseTargetMetaHosts(
 		masterZone *Zone
 	)
 	excludeZones := make([]string, 0)
-	if excludeZone != "" {
-		excludeZones = append(excludeZones, excludeZone)
+	if len(excludeZone) > 0 {
+		excludeZones = append(excludeZones, excludeZone...)
 	}
 
 	// when creating vol,user specified a zone,we reset zoneNum to 1,to be created partition with specified zone,

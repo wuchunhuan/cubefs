@@ -102,7 +102,6 @@ func (c *Cluster) decommissionMetaPartition(nodeAddr string, mp *MetaPartition) 
 		excludeNodeSets []uint64
 		oldHosts        []string
 		zones           []string
-		excludeZone     string
 	)
 	log.LogWarnf("action[decommissionMetaPartition],volName[%v],nodeAddr[%v],partitionID[%v] begin", mp.volName, nodeAddr, mp.PartitionID)
 	mp.RLock()
@@ -139,10 +138,11 @@ func (c *Cluster) decommissionMetaPartition(nodeAddr string, mp *MetaPartition) 
 		excludeNodeSets = append(excludeNodeSets, ns.ID)
 		if _, newPeers, err = zone.getAvailMetaNodeHosts(excludeNodeSets, oldHosts, 1); err != nil {
 			zones = mp.getLiveZones(nodeAddr)
+			var excludeZone []string
 			if len(zones) == 0 {
-				excludeZone = zone.name
+				excludeZone = append(excludeZone, zone.name)
 			} else {
-				excludeZone = zones[0]
+				excludeZone = append(excludeZone, zones[0])
 			}
 			// choose a meta node in other zone
 			if _, newPeers, err = c.chooseTargetMetaHosts(excludeZone, excludeNodeSets, oldHosts, 1, false, ""); err != nil {

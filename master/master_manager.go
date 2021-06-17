@@ -104,8 +104,8 @@ func (m *Server) loadMetadata() {
 	}
 	var loadDomain bool
 	if m.cluster.FaultDomain { // try load exclude
-		if loadDomain,err = m.cluster.loadExcludeZoneDomain(); err != nil {
-			log.LogInfof("action[putExcludeZoneDomain] err[%v]", err)
+		if loadDomain,err = m.cluster.loadZoneDomain(); err != nil {
+			log.LogInfof("action[putZoneDomain] err[%v]", err)
 			panic(err)
 		}
 		if loadDomain { // if load success,start grp manager ,load nodeset can trigger build ns grps
@@ -120,8 +120,8 @@ func (m *Server) loadMetadata() {
 	if m.cluster.FaultDomain {
 		log.LogInfof("action[FaultDomain] set")
 		if !loadDomain { //first restart after domain item be added
-			if err = m.cluster.putExcludeZoneDomain(opSyncExclueDomain); err != nil {
-				log.LogInfof("action[putExcludeZoneDomain] err[%v]", err)
+			if err = m.cluster.putZoneDomain(true); err != nil {
+				log.LogInfof("action[putZoneDomain] err[%v]", err)
 				panic(err)
 			}
 		}

@@ -54,6 +54,7 @@ const (
 	dpSelectorNameKey       = "dpSelectorName"
 	dpSelectorParmKey       = "dpSelectorParm"
 	nodeTypeKey             = "nodeType"
+	ratio                   = "ratio"
 )
 
 const (
@@ -143,8 +144,7 @@ const (
 	opSyncDeleteVolUser        uint32 = 0x1D
 	opSyncUpdateVolUser        uint32 = 0x1E
 	opSyncNodeSetGrp           uint32 = 0x1F
-
-	opSyncExclueDomain           uint32 = 0x23
+	opSyncExclueDomain         uint32 = 0x23
 )
 
 const (
@@ -158,7 +158,7 @@ const (
 	clusterAcronym        = "c"
 	nodeSetAcronym        = "s"
 	nodeSetGrpAcronym     = "g"
-	excludeDomainAcronym     = "zoneExclude"
+	domainAcronym         = "zoneDomain"
 	maxDataPartitionIDKey = keySeparator + "max_dp_id"
 	maxMetaPartitionIDKey = keySeparator + "max_mp_id"
 	maxCommonIDKey        = keySeparator + "max_common_id"
@@ -170,11 +170,11 @@ const (
 	clusterPrefix         = keySeparator + clusterAcronym + keySeparator
 	nodeSetPrefix         = keySeparator + nodeSetAcronym + keySeparator
 	nodeSetGrpPrefix      = keySeparator + nodeSetGrpAcronym + keySeparator
-	ExcludeDomainPrefix   = keySeparator + excludeDomainAcronym + keySeparator
-	akAcronym      = "ak"
-	userAcronym    = "user"
-	volUserAcronym = "voluser"
-	akPrefix       = keySeparator + akAcronym + keySeparator
-	userPrefix     = keySeparator + userAcronym + keySeparator
-	volUserPrefix  = keySeparator + volUserAcronym + keySeparator
+	DomainPrefix          = keySeparator + domainAcronym + keySeparator
+	akAcronym             = "ak"
+	userAcronym           = "user"
+	volUserAcronym        = "voluser"
+	akPrefix              = keySeparator + akAcronym + keySeparator
+	userPrefix            = keySeparator + userAcronym + keySeparator
+	volUserPrefix         = keySeparator + volUserAcronym + keySeparator
 )

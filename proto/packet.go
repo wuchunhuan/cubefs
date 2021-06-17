@@ -155,6 +155,8 @@ const (
 	OpOk                 uint8 = 0xF0
 
 	OpPing uint8 = 0xFF
+	OpMetaUpdateXAttr           uint8 = 0x3B
+	OpMetaReadDirOnly	uint8 = 0x3C
 )
 
 const (
@@ -375,6 +377,8 @@ func (p *Packet) GetOpMsg() (m string) {
 		m = "OpMetaListXAttr"
 	case OpMetaBatchGetXAttr:
 		m = "OpMetaBatchGetXAttr"
+	case OpMetaUpdateXAttr:
+		m = "OpMetaUpdateXAttr"
 	case OpCreateMultipart:
 		m = "OpCreateMultipart"
 	case OpGetMultipart:
@@ -636,8 +640,8 @@ func (p *Packet) GetUniqueLogId() (m string) {
 		return
 	}
 	m = fmt.Sprintf("Req(%v)_Partition(%v)_", p.ReqID, p.PartitionID)
-	if p.Opcode == OpMarkDelete && len(p.Data) > 0 {
-		ext := new(ExtentKey)
+	if p.ExtentType == TinyExtentType && p.Opcode == OpMarkDelete && len(p.Data) > 0 {
+		ext := new(TinyExtentDeleteRecord)
 		err := json.Unmarshal(p.Data, ext)
 		if err == nil {
 			m += fmt.Sprintf("Extent(%v)_ExtentOffset(%v)_Size(%v)_Opcode(%v)",
@@ -667,8 +671,8 @@ func (p *Packet) GetUniqueLogId() (m string) {
 
 func (p *Packet) setPacketPrefix() {
 	p.mesg = fmt.Sprintf("Req(%v)_Partition(%v)_", p.ReqID, p.PartitionID)
-	if p.Opcode == OpMarkDelete && len(p.Data) > 0 {
-		ext := new(ExtentKey)
+	if p.ExtentType == TinyExtentType && p.Opcode == OpMarkDelete && len(p.Data) > 0 {
+		ext := new(TinyExtentDeleteRecord)
 		err := json.Unmarshal(p.Data, ext)
 		if err == nil {
 			p.mesg += fmt.Sprintf("Extent(%v)_ExtentOffset(%v)_Size(%v)_Opcode(%v)",

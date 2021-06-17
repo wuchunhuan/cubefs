@@ -54,8 +54,8 @@ type Vol struct {
 	FollowerRead       bool
 	authenticate       bool
 	crossZone          bool
-	defaultPriority    bool // old default zone
-	balanceZone        bool
+	domainOn           bool
+	defaultPriority    bool // old default zone first
 	zoneName           string
 	MetaPartitions     map[uint64]*MetaPartition `graphql:"-"`
 	mpsLock            sync.RWMutex
@@ -408,14 +408,15 @@ func (vol *Vol) checkAutoDataPartitionCreation(c *Cluster) {
 }
 
 func (vol *Vol) autoCreateDataPartitions(c *Cluster) {
-	if vol.dataPartitions.lastAutoCreateTime.After(time.Now()) {
+	if vol.dataPartitions.lastAutoCreateTime.IsZero() ||
+			vol.dataPartitions.lastAutoCreateTime.After(time.Now()) {
 		vol.dataPartitions.lastAutoCreateTime = time.Now()
 		return
 	}
 	if time.Since(vol.dataPartitions.lastAutoCreateTime) < time.Minute {
 		return
 	}
-	log.LogInfof("action[autoCreateDataPartitions] vol[%v] lastAutoCreateTime[%v] now[%v]", vol.Name, vol.dataPartitions.lastAutoCreateTime, time.Now())
+
 	if (vol.Capacity > 200000 && vol.dataPartitions.readableAndWritableCnt < 200) || vol.dataPartitions.readableAndWritableCnt < minNumOfRWDataPartitions {
 		vol.dataPartitions.lastAutoCreateTime = time.Now()
 		count := vol.calculateExpansionNum()
@@ -461,6 +462,7 @@ func (vol *Vol) updateViewCache(c *Cluster) {
 	vol.setMpsCache(mpsBody)
 	dpResps := vol.dataPartitions.getDataPartitionsView(0)
 	view.DataPartitions = dpResps
+	view.DomainOn = vol.domainOn
 	viewReply := newSuccessHTTPReply(view)
 	body, err := json.Marshal(viewReply)
 	if err != nil {
@@ -742,7 +744,8 @@ func (vol *Vol) doCreateMetaPartition(c *Cluster, start, end uint64) (mp *MetaPa
 			return nil, errors.NewError(err)
 		}
 	} else {
-		if hosts, peers, err = c.chooseTargetMetaHosts("", nil, nil, int(vol.mpReplicaNum), vol.crossZone, vol.zoneName); err != nil {
+		var excludeZone []string
+		if hosts, peers, err = c.chooseTargetMetaHosts(excludeZone, nil, nil, int(vol.mpReplicaNum), vol.crossZone, vol.zoneName); err != nil {
 			log.LogErrorf("action[doCreateMetaPartition] chooseTargetMetaHosts err[%v]", err)
 			return nil, errors.NewError(err)
 		}

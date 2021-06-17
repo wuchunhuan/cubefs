@@ -137,6 +137,7 @@ type volValue struct {
 	FollowerRead      bool
 	Authenticate      bool
 	CrossZone         bool
+	DomainOn          bool
 	ZoneName          string
 	OSSAccessKey      string
 	OSSSecretKey      string
@@ -165,6 +166,7 @@ func newVolValue(vol *Vol) (vv *volValue) {
 		FollowerRead:      vol.FollowerRead,
 		Authenticate:      vol.authenticate,
 		CrossZone:         vol.crossZone,
+		DomainOn:          vol.domainOn,
 		ZoneName:          vol.zoneName,
 		OSSAccessKey:      vol.OSSAccessKey,
 		OSSSecretKey:      vol.OSSSecretKey,
@@ -229,13 +231,15 @@ type nodeSetGrpValue struct {
 	Status    	uint8
 }
 
-type exclueZoneDomainValue struct {
-	ZoneMap 	map[string]int
+type zoneDomainValue struct {
+	ExcludeZoneMap  map[string]int
 	NeedFaultDomain bool
+	DataRatio       float64
+	ExcludeZoneUseRatio    float64
 }
-func newExcludeZoneDomainValue() (ev *exclueZoneDomainValue) {
-	ev = &exclueZoneDomainValue{
-		ZoneMap : make(map[string]int),
+func newZoneDomainValue() (ev *zoneDomainValue) {
+	ev = &zoneDomainValue{
+		ExcludeZoneMap: make(map[string]int),
 	}
 	return
 }
@@ -607,52 +611,70 @@ func (c *Cluster) loadNodeSets() (err error) {
 	return nil
 }
 // put exclude zone only be used one time when master update and restart
-func (c *Cluster) putExcludeZoneDomain(opType uint32) (err error) {
-	log.LogInfof("action[putExcludeZoneDomain], opType[%v]", opType)
+func (c *Cluster) putZoneDomain(init bool) (err error) {
+	log.LogInfof("action[putZoneDomain]")
 	metadata := new(RaftCmd)
-	metadata.Op = opType
-	metadata.K = ExcludeDomainPrefix
-	for i := 0; i < len(c.t.zones); i++ {
-		c.nodeSetGrpManager.excludeZoneListDomain[c.t.zones[i].name] = 0
+	metadata.Op = opSyncExclueDomain
+	metadata.K = DomainPrefix
+	if init {
+		for i := 0; i < len(c.t.zones); i++ {
+			c.nodeSetGrpManager.excludeZoneListDomain[c.t.zones[i].name] = 0
+			c.t.domainExcludeZones = append(c.t.domainExcludeZones, c.t.zones[i].name)
+		}
+		if len(c.t.zones) == 0 {
+			c.needFaultDomain = true
+		}
 	}
-	if len(c.t.zones) == 0 {
-		c.needFaultDomain = true
+	domainValue := newZoneDomainValue()
+	domainValue.ExcludeZoneMap = c.nodeSetGrpManager.excludeZoneListDomain
+	domainValue.NeedFaultDomain = c.needFaultDomain
+	if c.nodeSetGrpManager.dataRatioLimit > 0 {
+		domainValue.DataRatio = c.nodeSetGrpManager.dataRatioLimit
+	} else {
+		domainValue.DataRatio = defaultZoneUsageThreshold
 	}
-	exclueValue := newExcludeZoneDomainValue()
-	exclueValue.ZoneMap = c.nodeSetGrpManager.excludeZoneListDomain
-	exclueValue.NeedFaultDomain = c.needFaultDomain
+	if c.nodeSetGrpManager.excludeZoneUseRatio > 0 && c.nodeSetGrpManager.excludeZoneUseRatio <= 1{
+		domainValue.DataRatio = c.nodeSetGrpManager.excludeZoneUseRatio
+	} else {
+		domainValue.DataRatio = defaultZoneUsageThreshold
+	}
 
-	metadata.V, err = json.Marshal(exclueValue)
+	metadata.V, err = json.Marshal(domainValue)
 	if err != nil {
 		return
 	}
 	return c.submit(metadata)
 }
-func (c *Cluster) loadExcludeZoneDomain() (ok bool, err error) {
-	log.LogInfof("action[loadExcludeZoneDomain]")
-	result, err := c.fsm.store.SeekForPrefix([]byte(ExcludeDomainPrefix))
+func (c *Cluster) loadZoneDomain() (ok bool, err error) {
+	log.LogInfof("action[loadZoneDomain]")
+	result, err := c.fsm.store.SeekForPrefix([]byte(DomainPrefix))
 	if err != nil {
-		err = fmt.Errorf("action[loadExcludeZoneDomain],err:%v", err.Error())
-		log.LogInfof("action[loadExcludeZoneDomain] err[%v]", err)
+		err = fmt.Errorf("action[loadZoneDomain],err:%v", err.Error())
+		log.LogInfof("action[loadZoneDomain] err[%v]", err)
 		return false, err
 	}
 	if len(result) == 0 {
-		err = fmt.Errorf("action[loadExcludeZoneDomain],err:not found")
-		log.LogInfof("action[loadExcludeZoneDomain] err[%v]", err)
+		err = fmt.Errorf("action[loadZoneDomain],err:not found")
+		log.LogInfof("action[loadZoneDomain] err[%v]", err)
 		return false,nil
 	}
 	for _, value := range result {
-		nsv := &exclueZoneDomainValue{}
+		nsv := &zoneDomainValue{}
 		if err = json.Unmarshal(value, nsv); err != nil {
 			log.LogErrorf("action[loadNodeSets], unmarshal err:%v", err.Error())
 			return true, err
 		}
-		log.LogInfof("action[loadExcludeZoneDomain] get value!exclue map[%v],need domain[%v]", nsv.ZoneMap, nsv.NeedFaultDomain)
-		c.nodeSetGrpManager.excludeZoneListDomain = nsv.ZoneMap
+		log.LogInfof("action[loadZoneDomain] get value!exclue map[%v],need domain[%v]", nsv.ExcludeZoneMap, nsv.NeedFaultDomain)
+		c.nodeSetGrpManager.excludeZoneListDomain = nsv.ExcludeZoneMap
+		for zoneName, _ := range nsv.ExcludeZoneMap {
+			c.t.domainExcludeZones = append(c.t.domainExcludeZones, zoneName)
+		}
 		c.needFaultDomain = nsv.NeedFaultDomain
+		c.nodeSetGrpManager.dataRatioLimit = nsv.DataRatio
+		c.nodeSetGrpManager.excludeZoneUseRatio = nsv.ExcludeZoneUseRatio
 		break
 	}
-	log.LogInfof("action[loadExcludeZoneDomain] success!")
+	log.LogInfof("action[loadZoneDomain] success!")
 	return true, nil
 }
 

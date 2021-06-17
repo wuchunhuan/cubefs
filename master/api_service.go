@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -787,6 +788,8 @@ func newSimpleView(vol *Vol) *proto.SimpleVolView {
 		NeedToLowerReplica: vol.NeedToLowerReplica,
 		Authenticate:       vol.authenticate,
 		CrossZone:          vol.crossZone,
+		DefaultPriority:    vol.defaultPriority,
+		DomainOn:           vol.domainOn,
 		RwDpCnt:            vol.dataPartitions.readableAndWritableCnt,
 		MpCnt:              len(vol.MetaPartitions),
 		DpCnt:              len(vol.dataPartitions.partitionMap),
@@ -798,18 +801,47 @@ func newSimpleView(vol *Vol) *proto.SimpleVolView {
 	}
 }
 
+func checkIp(addr string) bool {
+	var arr []string
+	if arr = strings.Split(addr, ":"); len(arr) < 2 {
+		return false
+	}
+	if id, err := strconv.ParseUint(arr[1], 10, 64);err != nil || id > 65535 || id < 1024 {
+		return false
+	}
+	ip := strings.Trim(addr, " ")
+	regStr := `^(([1-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.)(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){2}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])`
+	if match, _ := regexp.MatchString(regStr, ip); match {
+		return true
+	}
+	return false
+}
+
 func (m *Server) addDataNode(w http.ResponseWriter, r *http.Request) {
 	var (
-		nodeAddr string
-		zoneName string
-		id       uint64
-		err      error
+		nodeAddr  string
+		zoneName  string
+		id        uint64
+		err       error
+		nodesetId uint64
 	)
 	if nodeAddr, zoneName, err = parseRequestForAddNode(r); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if id, err = m.cluster.addDataNode(nodeAddr, zoneName); err != nil {
+	if !checkIp(nodeAddr) {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: fmt.Errorf("addr not legal").Error()})
+		return
+	}
+	var value string
+	if value = r.FormValue(idKey); value == "" {
+		nodesetId = 0
+	} else {
+		if nodesetId, err = strconv.ParseUint(value, 10, 64); err != nil {
+			sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		}
+	}
+	if id, err = m.cluster.addDataNode(nodeAddr, zoneName, nodesetId); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
@@ -843,6 +875,7 @@ func (m *Server) getDataNode(w http.ResponseWriter, r *http.Request) {
 		Addr:                      dataNode.Addr,
 		ReportTime:                dataNode.ReportTime,
 		IsActive:                  dataNode.isActive,
+		IsWriteAble:               dataNode.isWriteAble(),
 		UsageRatio:                dataNode.UsageRatio,
 		SelectedTimes:             dataNode.SelectedTimes,
 		Carry:                     dataNode.Carry,
@@ -929,7 +962,22 @@ func (m *Server) setNodeInfoHandler(w http.ResponseWriter, r *http.Request) {
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodeinfo params %v successfully", params)))
 
 }
+func (m *Server) updateDataUseRatio(ratio float64) (err error) {
+	m.cluster.nodeSetGrpManager.Lock()
+	defer m.cluster.nodeSetGrpManager.Unlock()
 
+	m.cluster.nodeSetGrpManager.dataRatioLimit = ratio
+	err = m.cluster.putZoneDomain(false)
+	return
+}
+func (m *Server) updateExcludeZoneUseRatio(ratio float64) (err error) {
+	m.cluster.nodeSetGrpManager.Lock()
+	defer m.cluster.nodeSetGrpManager.Unlock()
+
+	m.cluster.nodeSetGrpManager.excludeZoneUseRatio = ratio
+	err = m.cluster.putZoneDomain(false)
+	return
+}
 func (m *Server) updateNodesetId(zoneName string, destNodesetId uint64, nodeType uint64, addr string) (err error) {
 	var (
 		nsId     uint64
@@ -1073,38 +1121,79 @@ func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
 	nsgStat.ID = nsg.ID
 	nsgStat.Status = nsg.status
 	for i := 0; i < len(nsg.nodeSets); i++ {
-		var nsStat proto.SimpleNodeSet
+		var nsStat proto.NodeSetInfo
 		nsStat.ID = nsg.nodeSets[i].ID
 		nsStat.Capacity = nsg.nodeSets[i].Capacity
 		nsStat.ZoneName = nsg.nodeSets[i].zoneName
 		nsg.nodeSets[i].dataNodes.Range(func(key, value interface{}) bool {
 			node := value.(*DataNode)
 			nsStat.DataTotal += node.Total
-			nsStat.DataUsed += node.Used
+			if node.isWriteAble() {
+				nsStat.DataUsed += node.Used
+			} else {
+				nsStat.DataUsed += node.Total
+			}
 			log.LogInfof("nodeset index[%v], datanode nodeset id[%v],zonename[%v], addr[%v] inner nodesetid[%v]",
 				i, nsStat.ID, node.ZoneName, node.Addr, node.NodeSetID)
-			nsStat.DataNodes = append(nsStat.DataNodes, proto.NodeView{ID: node.ID, Addr: node.Addr,
-				Status: node.isActive, IsWritable: node.isWriteAble()})
+
+			dataNodeInfo := &proto.DataNodeInfo{
+				Total:                     node.Total,
+				Used:                      node.Used,
+				AvailableSpace:            node.AvailableSpace,
+				ID:                        node.ID,
+				ZoneName:                  node.ZoneName,
+				Addr:                      node.Addr,
+				ReportTime:                node.ReportTime,
+				IsActive:                  node.isActive,
+				IsWriteAble:               node.isWriteAble(),
+				UsageRatio:                node.UsageRatio,
+				SelectedTimes:             node.SelectedTimes,
+				Carry:                     node.Carry,
+				DataPartitionCount:        node.DataPartitionCount,
+				NodeSetID:                 node.NodeSetID,
+			}
+			nsStat.DataNodes = append(nsStat.DataNodes, dataNodeInfo)
 			return true
 		})
+		nsStat.DataUseRatio , _ = strconv.ParseFloat(fmt.Sprintf("%.2f", float64(nsStat.DataUsed) / float64(nsStat.DataTotal)), 64)
+
 		nsg.nodeSets[i].metaNodes.Range(func(key, value interface{}) bool {
 			node := value.(*MetaNode)
 			nsStat.MetaTotal += node.Total
 			nsStat.MetaUsed += node.Used
 			log.LogInfof("nodeset index[%v], metanode nodeset id[%v],zonename[%v], addr[%v] inner nodesetid[%v]",
 				i, nsStat.ID, node.ZoneName, node.Addr, node.NodeSetID)
-			nsStat.MetaNodes = append(nsStat.MetaNodes, proto.NodeView{ID: node.ID, Addr: node.Addr,
-									Status: node.IsActive, IsWritable: node.isWritable()})
+
+			metaNodeInfo := &proto.MetaNodeInfo{
+				ID:                        node.ID,
+				Addr:                      node.Addr,
+				IsActive:                  node.IsActive,
+				IsWriteAble:               node.isWritable(),
+				ZoneName:                  node.ZoneName,
+				MaxMemAvailWeight:         node.MaxMemAvailWeight,
+				Total:                     node.Total,
+				Used:                      node.Used,
+				Ratio:                     node.Ratio,
+				SelectCount:               node.SelectCount,
+				Carry:                     node.Carry,
+				Threshold:                 node.Threshold,
+				ReportTime:                node.ReportTime,
+				MetaPartitionCount:        node.MetaPartitionCount,
+				NodeSetID:                 node.NodeSetID,
+			}
+
+
+			nsStat.MetaNodes = append(nsStat.MetaNodes, metaNodeInfo)
 			return true
 		})
-
+		nsStat.MetaUseRatio, _ = strconv.ParseFloat(fmt.Sprintf("%.2f", float64(nsStat.MetaUsed) / float64(nsStat.MetaTotal)), 64)
 		nsgStat.NodeSetInfo = append(nsgStat.NodeSetInfo, nsStat)
 		log.LogInfof("nodeset index[%v], nodeset id[%v],capacity[%v], datatotal[%v] dataused[%v] metatotal[%v] metaused[%v], metanode[%v], datanodes[%v]",
 				i, nsStat.ID, nsStat.Capacity, nsStat.DataTotal, nsStat.DataUsed, nsStat.MetaTotal, nsStat.MetaUsed, nsStat.MetaNodes, nsStat.DataNodes)
 	}
 	return nsgStat
 }
-func (m *Server) upDataNodeSetCapacityHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Server) updateNodeSetCapacityHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		params map[string]interface{}
 		err    error
@@ -1119,7 +1208,58 @@ func (m *Server) upDataNodeSetCapacityHandler(w http.ResponseWriter, r *http.Req
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
 }
 
-func (m *Server) upDataNodeSetIdHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Server) updateDataUseRatioHandler(w http.ResponseWriter, r *http.Request) {
+	var (
+		params map[string]interface{}
+		err    error
+	)
+	var value string
+	if value = r.FormValue(ratio); value == "" {
+		err = keyNotFound(ratio)
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	var ratioVal float64
+	if ratioVal, err = strconv.ParseFloat(value, 64); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	if ratioVal == 0 || ratioVal > 1{
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	if  err = m.updateDataUseRatio(ratioVal); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
+}
+
+func (m *Server) updateZoneExcludeRatioHandler(w http.ResponseWriter, r *http.Request) {
+	var (
+		params map[string]interface{}
+		err    error
+	)
+	var value string
+	if value = r.FormValue(ratio); value == "" {
+		err = keyNotFound(ratio)
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	var ratioVal float64
+	if ratioVal, err = strconv.ParseFloat(value, 64); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+
+	if  err = m.updateExcludeZoneUseRatio(ratioVal); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodesetinfo params %v successfully", params)))
+}
+
+func (m *Server) updateNodeSetIdHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		nodeAddr     string
 		id           uint64
@@ -1182,12 +1322,26 @@ func (m *Server) getNodeSetGrpInfoHandler(w http.ResponseWriter, r *http.Request
 	}
 	sendOkReply(w, r, newSuccessHTTPReply(info))
 }
+func (m *Server) getIsDomainOn(w http.ResponseWriter, r *http.Request) {
+	type SimpleDomainInfo struct {
+		DomainOn       bool
+	}
+	nsglStat := new(SimpleDomainInfo)
+	nsglStat.DomainOn = m.cluster.FaultDomain
+	sendOkReply(w, r, newSuccessHTTPReply(nsglStat))
+}
 
 // get metanode some interval params
 func (m *Server) getAllNodeSetGrpInfoHandler(w http.ResponseWriter, r *http.Request) {
 	var i int
 	nsgm := m.cluster.nodeSetGrpManager
 	nsglStat := new(proto.SimpleNodeSetGrpInfoList)
+	nsglStat.DomainOn = m.cluster.FaultDomain
+	nsglStat.NeedDomain = m.cluster.needFaultDomain
+	nsglStat.DataRatioLimit = nsgm.dataRatioLimit
+	nsglStat.ZoneExcludeRatioLimit = nsgm.excludeZoneUseRatio
+	nsglStat.Status = nsgm.status
+	nsglStat.ExcludeZones = nsgm.c.t.domainExcludeZones
 	for i = 0; i < len(nsgm.nodeSetGrpMap) ; i++ {
 		log.LogInfof("action[getAllNodeSetGrpInfoHandler] index [%v],id [%v],Print inner nodeset now!", i, nsgm.nodeSetGrpMap[i].ID)
 		nsglStat.SimpleNodeSetGrpInfo = append(nsglStat.SimpleNodeSetGrpInfo, m.buildNodeSetGrpInfo(i))
@@ -1300,12 +1454,25 @@ func (m *Server) addMetaNode(w http.ResponseWriter, r *http.Request) {
 		zoneName string
 		id       uint64
 		err      error
+		nodesetId uint64
 	)
 	if nodeAddr, zoneName, err = parseRequestForAddNode(r); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if id, err = m.cluster.addMetaNode(nodeAddr, zoneName); err != nil {
+	if !checkIp(nodeAddr) {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: fmt.Errorf("addr not legal").Error()})
+		return
+	}
+	var value string
+	if value = r.FormValue(idKey); value == "" {
+		nodesetId = 0
+	} else {
+		if nodesetId, err = strconv.ParseUint(value, 10, 64); err != nil {
+			sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		}
+	}
+	if id, err = m.cluster.addMetaNode(nodeAddr, zoneName, nodesetId); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
@@ -1372,6 +1539,7 @@ func (m *Server) getMetaNode(w http.ResponseWriter, r *http.Request) {
 		ID:                        metaNode.ID,
 		Addr:                      metaNode.Addr,
 		IsActive:                  metaNode.IsActive,
+		IsWriteAble:               metaNode.isWritable(),
 		ZoneName:                  metaNode.ZoneName,
 		MaxMemAvailWeight:         metaNode.MaxMemAvailWeight,
 		Total:                     metaNode.Total,
