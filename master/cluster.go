@@ -1685,6 +1685,7 @@ errHandler:
 func (c *Cluster) checkVolInfo(name string, crossZone bool, zoneName string) (newZoneName string, err error){
 	newZoneName = zoneName
 	if crossZone {
+		//
 		if c.t.zoneLen() <= 1 && !c.FaultDomain{
 			return newZoneName, fmt.Errorf("action[checkVolInfo] cluster has one zone,can't cross zone")
 		}
@@ -1695,7 +1696,7 @@ func (c *Cluster) checkVolInfo(name string, crossZone bool, zoneName string) (ne
 		// len(c.t.zones) is 0, or set false in check status
 		if newZoneName == ""{
 			if  !c.needFaultDomain {
-				if c.t.getZone(DefaultZoneName); err != nil {
+				if _,err = c.t.getZone(DefaultZoneName); err != nil {
 					return newZoneName, fmt.Errorf("action[checkVolInfo] the vol is not cross zone and didn't set zone name,but there's no default zone")
 				}
 				log.LogInfof("action[checkVolInfo] vol [%v] use default zone", name)
@@ -1714,7 +1715,12 @@ func (c *Cluster) checkVolInfo(name string, crossZone bool, zoneName string) (ne
 				if !isExcludeZone {
 					return newZoneName, fmt.Errorf("action[checkVolInfo] the zonename[%v] not execluded domain name.should not be assigned")
 				}
+			} else {
+				if _,err = c.t.getZone(newZoneName); err != nil {
+					return newZoneName, fmt.Errorf("action[checkVolInfo] the vol is not cross zone and didn't set zone name,but there's no default zone")
+				}
 			}
+			// todo
 		}
 	}
 	return
