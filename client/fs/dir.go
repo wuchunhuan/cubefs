@@ -465,7 +465,7 @@ func (d *Dir) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fus
 		if cacheSummaryInfo != nil {
 			summaryInfo = *cacheSummaryInfo
 		} else {
-			summaryInfo, err = d.super.mw.GetSummary_ll(ino)
+			summaryInfo, err = d.super.mw.GetSummary_ll(ino, 20)
 			if err != nil {
 				log.LogErrorf("GetXattr: ino(%v) name(%v) err(%v)", ino, name, err)
 				return ParseError(err)

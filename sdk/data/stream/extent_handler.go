@@ -405,7 +405,6 @@ func (eh *ExtentHandler) cleanup() (err error) {
 
 // can ONLY be called when the handler is not open any more
 func (eh *ExtentHandler) appendExtentKey() (err error) {
-	//log.LogDebugf("appendExtentKey enter: eh(%v)", eh)
 	if eh.key != nil {
 		if eh.dirty {
 			var discard []proto.ExtentKey
@@ -421,7 +420,6 @@ func (eh *ExtentHandler) appendExtentKey() (err error) {
 	if err == nil {
 		eh.dirty = false
 	}
-	//log.LogDebugf("appendExtentKey exit: eh(%v)", eh)
 	return
 }
 
