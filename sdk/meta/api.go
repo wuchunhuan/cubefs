@@ -999,7 +999,6 @@ func (mw *MetaWrapper) XAttrsList_ll(inode uint64) ([]string, error) {
 }
 
 func (mw *MetaWrapper) UpdateSummary_ll(parentIno uint64, filesInc int64, dirsInc int64, bytesInc int64) {
-	log.LogErrorf("------- UpdateSummary_ll inode(%d) filesInc(%d) dirsInc(%d) bytesInc(%d)", parentIno, filesInc, dirsInc, bytesInc)
 	if filesInc == 0 && dirsInc == 0 && bytesInc == 0 {
 		return
 	}
