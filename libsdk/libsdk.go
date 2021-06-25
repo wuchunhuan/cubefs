@@ -182,6 +182,7 @@ type client struct {
 	followerRead bool
 	logDir       string
 	logLevel     string
+	enableSummary bool
 
 	// runtime context
 	cwd    string // current working directory
@@ -228,6 +229,12 @@ func cfs_set_client(id C.int64_t, key, val *C.char) C.int {
 		c.logDir = v
 	case "logLevel":
 		c.logLevel = v
+	case "enableSummary":
+		if v == "true" {
+			c.enableSummary = true
+		} else {
+			c.enableSummary = false
+		}
 	default:
 		return statusEINVAL
 	}
@@ -671,9 +678,12 @@ func cfs_batch_get_inodes(id C.int64_t, fd C.int, iids unsafe.Pointer, stats []C
 }
 
 //export cfs_refreshsummary
-func cfs_refreshsummary(id C.int64_t, path *C.char) C.int {
+func cfs_refreshsummary(id C.int64_t, path *C.char, goroutine_num C.int) C.int {
 	c, exist := getClient(int64(id))
 	if !exist {
+		return statusEINVAL
+	}
+	if !c.enableSummary {
 		return statusEINVAL
 	}
 	info, err := c.lookupPath(c.absPath(C.GoString(path)))
@@ -683,7 +693,8 @@ func cfs_refreshsummary(id C.int64_t, path *C.char) C.int {
 	} else {
 		ino = info.Inode
 	}
-	err = c.mw.RefreshSummary_ll(ino)
+	goroutineNum := int32(goroutine_num)
+	err = c.mw.RefreshSummary_ll(ino, goroutineNum)
 	if err != nil {
 		return errorToStatus(err)
 	}
@@ -691,7 +702,7 @@ func cfs_refreshsummary(id C.int64_t, path *C.char) C.int {
 }
 
 //export cfs_getsummary
-func cfs_getsummary(id C.int64_t, path *C.char, summary *C.struct_cfs_summary_info, useCache *C.char) C.int {
+func cfs_getsummary(id C.int64_t, path *C.char, summary *C.struct_cfs_summary_info, useCache *C.char, goroutine_num C.int) C.int {
 	c, exist := getClient(int64(id))
 	if !exist {
 		return statusEINVAL
@@ -715,7 +726,8 @@ func cfs_getsummary(id C.int64_t, path *C.char, summary *C.struct_cfs_summary_in
 	if !proto.IsDir(info.Mode) {
 		return statusENOTDIR
 	}
-	summaryInfo, err := c.mw.GetSummary_ll(info.Inode)
+	goroutineNum := int32(goroutine_num)
+	summaryInfo, err := c.mw.GetSummary_ll(info.Inode, goroutineNum)
 	if err != nil {
 		return errorToStatus(err)
 	}
@@ -953,6 +965,7 @@ func (c *client) start() (err error) {
 		Volume:        c.volName,
 		Masters:       masters,
 		ValidateOwner: false,
+		EnableSummary: c.enableSummary,
 	}); err != nil {
 		return err
 	}

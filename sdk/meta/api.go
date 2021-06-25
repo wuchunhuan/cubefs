@@ -45,7 +45,9 @@ const (
 
 const (
 	SummaryKey = "DirStat"
-	MaxSummaryGoroutineNum = 20
+	MaxSummaryGoroutineNum = 100
+	ChannelLen = 100
+	BatchSize = 200
 )
 
 func (mw *MetaWrapper) GetRootIno(subdir string) (uint64, error) {
@@ -153,13 +155,15 @@ create_dentry:
 		return nil, statusToErrno(status)
 	}
 
-	var filesInc, dirsInc int64
-	if proto.IsDir(mode) {
-		dirsInc = 1
-	} else {
-		filesInc = 1
+	if mw.EnableSummary {
+		var filesInc, dirsInc int64
+		if proto.IsDir(mode) {
+			dirsInc = 1
+		} else {
+			filesInc = 1
+		}
+		go mw.UpdateSummary_ll(parentID, filesInc, dirsInc, 0)
 	}
-	go mw.UpdateSummary_ll(parentID, filesInc, dirsInc, 0)
 
 	return info, nil
 }
@@ -388,13 +392,15 @@ func (mw *MetaWrapper) Delete_ll(parentID uint64, name string, isDir bool) (*pro
 		return nil, nil
 	}
 
-	go func() {
-		if proto.IsDir(mode) {
-			mw.UpdateSummary_ll(parentID, 0, -1, 0)
-		} else {
-			mw.UpdateSummary_ll(parentID, -1, 0, -int64(info.Size))
-		}
-	}()
+	if mw.EnableSummary {
+		go func() {
+			if proto.IsDir(mode) {
+				mw.UpdateSummary_ll(parentID, 0, -1, 0)
+			} else {
+				mw.UpdateSummary_ll(parentID, -1, 0, -int64(info.Size))
+			}
+		}()
+	}
 
 	return info, nil
 }
@@ -434,7 +440,9 @@ func (mw *MetaWrapper) Rename_ll(srcParentID uint64, srcName string, dstParentID
 
 	var srcInodeInfo *proto.InodeInfo
 	var dstInodeInfo *proto.InodeInfo
-	srcInodeInfo, _ = mw.InodeGet_ll(inode)
+	if mw.EnableSummary {
+		srcInodeInfo, _ = mw.InodeGet_ll(inode)
+	}
 
 	// Note that only regular files are allowed to be overwritten.
 	if status == statusExist && proto.IsRegular(mode) {
@@ -442,7 +450,9 @@ func (mw *MetaWrapper) Rename_ll(srcParentID uint64, srcName string, dstParentID
 		if err != nil {
 			return syscall.EAGAIN
 		}
-		dstInodeInfo, _ = mw.InodeGet_ll(oldInode)
+		if mw.EnableSummary {
+			dstInodeInfo, _ = mw.InodeGet_ll(oldInode)
+		}
 	}
 
 	if status != statusOK {
@@ -481,25 +491,29 @@ func (mw *MetaWrapper) Rename_ll(srcParentID uint64, srcName string, dstParentID
 			// evict oldInode to avoid oldInode becomes orphan inode
 			mw.ievict(inodeMP, oldInode)
 		}
-		sizeInc := srcInodeInfo.Size - dstInodeInfo.Size
-		go func() {
-			mw.UpdateSummary_ll(srcParentID, -1, 0, -int64(srcInodeInfo.Size))
-			mw.UpdateSummary_ll(dstParentID, 0, 0, int64(sizeInc))
-		}()
+		if mw.EnableSummary{
+			sizeInc := srcInodeInfo.Size - dstInodeInfo.Size
+			go func() {
+				mw.UpdateSummary_ll(srcParentID, -1, 0, -int64(srcInodeInfo.Size))
+				mw.UpdateSummary_ll(dstParentID, 0, 0, int64(sizeInc))
+			}()
+		}
 	} else {
-		sizeInc := int64(srcInodeInfo.Size)
-		if proto.IsRegular(mode) {
-			// file
-			go func() {
-				mw.UpdateSummary_ll(srcParentID, -1, 0, -sizeInc)
-				mw.UpdateSummary_ll(dstParentID, 1, 0, sizeInc)
-			}()
-		} else {
-			// dir
-			go func() {
-				mw.UpdateSummary_ll(srcParentID, 0, -1, 0)
-				mw.UpdateSummary_ll(dstParentID, 0, 1, 0)
-			}()
+		if mw.EnableSummary {
+			sizeInc := int64(srcInodeInfo.Size)
+			if proto.IsRegular(mode) {
+				// file
+				go func() {
+					mw.UpdateSummary_ll(srcParentID, -1, 0, -sizeInc)
+					mw.UpdateSummary_ll(dstParentID, 1, 0, sizeInc)
+				}()
+			} else {
+				// dir
+				go func() {
+					mw.UpdateSummary_ll(srcParentID, 0, -1, 0)
+					mw.UpdateSummary_ll(dstParentID, 0, 1, 0)
+				}()
+			}
 		}
 	}
 	return nil
@@ -553,7 +567,10 @@ func (mw *MetaWrapper) AppendExtentKey(parentInode, inode uint64, ek proto.Exten
 		return syscall.ENOENT
 	}
 
-	oldInfo, _ := mw.InodeGet_ll(inode)
+	var oldInfo *proto.InodeInfo
+	if mw.EnableSummary {
+		oldInfo, _ = mw.InodeGet_ll(inode)
+	}
 
 	status, err := mw.appendExtentKey(mp, inode, ek, discard)
 	if err != nil || status != statusOK {
@@ -562,14 +579,16 @@ func (mw *MetaWrapper) AppendExtentKey(parentInode, inode uint64, ek proto.Exten
 	}
 	log.LogDebugf("AppendExtentKey: ino(%v) ek(%v) discard(%v)", inode, ek, discard)
 
-	go func() {
-		newInfo, _ := mw.InodeGet_ll(inode)
-		if oldInfo != nil && newInfo != nil {
-			if int64(oldInfo.Size) < int64(newInfo.Size) {
-				mw.UpdateSummary_ll(parentInode, 0, 0, int64(newInfo.Size) - int64(oldInfo.Size))
+	if mw.EnableSummary {
+		go func() {
+			newInfo, _ := mw.InodeGet_ll(inode)
+			if oldInfo != nil && newInfo != nil {
+				if int64(oldInfo.Size) < int64(newInfo.Size) {
+					mw.UpdateSummary_ll(parentInode, 0, 0, int64(newInfo.Size) - int64(oldInfo.Size))
+				}
 			}
-		}
-	}()
+		}()
+	}
 
 	return nil
 }
@@ -979,6 +998,24 @@ func (mw *MetaWrapper) XAttrsList_ll(inode uint64) ([]string, error) {
 	return keys, nil
 }
 
+func (mw *MetaWrapper) UpdateSummary_ll(parentIno uint64, filesInc int64, dirsInc int64, bytesInc int64) {
+	if filesInc == 0 && dirsInc == 0 && bytesInc == 0 {
+		return
+	}
+	mp := mw.getPartitionByInode(parentIno)
+	if mp == nil {
+		log.LogErrorf("UpdateSummary_ll: no such partition, inode(%v)", parentIno)
+		return
+	}
+	for cnt := 0; cnt < UpdateSummaryRetry; cnt++ {
+		err := mw.updateXAttrs(mp, parentIno, filesInc, dirsInc, bytesInc)
+		if err == nil {
+			return
+		}
+	}
+	return
+}
+
 func (mw *MetaWrapper) ReadDirOnly_ll(parentID uint64) ([]proto.Dentry, error) {
 	parentMP := mw.getPartitionByInode(parentID)
 	if parentMP == nil {
@@ -998,38 +1035,88 @@ type SummaryInfo struct {
 	Fbytes  int64
 }
 
-func walker(mw *MetaWrapper, inode uint64, out chan<- uint64, errch chan<- error, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool) {
+func (mw *MetaWrapper) GetSummary_ll(parentIno uint64, goroutineNum int32) (SummaryInfo, error) {
+	if goroutineNum > MaxSummaryGoroutineNum {
+		goroutineNum = MaxSummaryGoroutineNum
+	}
+	if goroutineNum <= 0 {
+		goroutineNum = 1
+	}
+	var summaryInfo SummaryInfo
+	errCh := make(chan error)
+	var wg sync.WaitGroup
+	var currentGoroutineNum int32 = 0
+	if mw.EnableSummary {
+		inodeCh := make(chan uint64, ChannelLen)
+		wg.Add(1)
+		atomic.AddInt32(&currentGoroutineNum, 1)
+		inodeCh <- parentIno
+		go mw.getDentry(parentIno, inodeCh, errCh, &wg, &currentGoroutineNum, true, goroutineNum)
+		go func() {
+			wg.Wait()
+			close(inodeCh)
+		}()
+		go mw.getDirSummary(&summaryInfo, inodeCh, errCh)
+		for err := range errCh {
+			return SummaryInfo{0,0,0}, err
+		}
+		return summaryInfo, nil
+	} else {
+		summaryCh := make(chan SummaryInfo, ChannelLen)
+		wg.Add(1)
+		atomic.AddInt32(&currentGoroutineNum, 1)
+		go mw.getSummaryOrigin(parentIno, summaryCh, errCh, &wg, &currentGoroutineNum, true, goroutineNum)
+		go func() {
+			wg.Wait()
+			close(summaryCh)
+		}()
+		go func(summaryInfo *SummaryInfo) {
+			for summary := range summaryCh {
+				summaryInfo.Files = summaryInfo.Files + summary.Files
+				summaryInfo.Subdirs = summaryInfo.Subdirs + summary.Subdirs
+				summaryInfo.Fbytes = summaryInfo.Fbytes + summary.Fbytes
+			}
+			close(errCh)
+		}(&summaryInfo)
+		for err := range errCh {
+			return SummaryInfo{0,0,0}, err
+		}
+		return summaryInfo, nil
+	}
+}
+
+
+func (mw *MetaWrapper) getDentry(parentIno uint64, inodeCh chan<- uint64, errCh chan<- error, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool, goroutineNum int32) {
 	defer func() {
 		if newGoroutine {
 			atomic.AddInt32(currentGoroutineNum, -1)
 			wg.Done()
 		}
 	}()
-	entries, err := mw.ReadDirOnly_ll(inode)
+	entries, err := mw.ReadDirOnly_ll(parentIno)
 	if err != nil {
-		errch <- err
+		errCh <- err
 		return
 	}
 	for _, entry := range entries {
-		if atomic.LoadInt32(currentGoroutineNum) < MaxSummaryGoroutineNum {
+		inodeCh <- entry.Inode
+		if atomic.LoadInt32(currentGoroutineNum) < goroutineNum {
 			wg.Add(1)
 			atomic.AddInt32(currentGoroutineNum, 1)
-			out <- entry.Inode
-			go walker(mw, entry.Inode, out, errch, wg, currentGoroutineNum, true)
+			go mw.getDentry(entry.Inode, inodeCh, errCh, wg, currentGoroutineNum, true, goroutineNum)
 		} else {
-			out <- entry.Inode
-			walker(mw, entry.Inode, out, errch, wg, currentGoroutineNum, false)
+			mw.getDentry(entry.Inode, inodeCh, errCh, wg, currentGoroutineNum, false, goroutineNum)
 		}
 	}
 }
 
-func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64, errch chan<- error) {
+func (mw *MetaWrapper) getDirSummary(summaryInfo *SummaryInfo, inodeCh <-chan uint64, errch chan<- error) {
 	var inodes []uint64
 	var keys []string
-	for inode := range in {
+	for inode := range inodeCh {
 		inodes = append(inodes, inode)
 		keys = append(keys, SummaryKey)
-		if len(inodes) < 100 {
+		if len(inodes) < BatchSize {
 			continue
 		}
 		xattrInfos, err := mw.BatchGetXAttr(inodes, keys)
@@ -1037,7 +1124,6 @@ func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64, errch c
 			errch <- err
 			return
 		}
-
 		inodes = inodes[0:0]
 		keys = keys[0:0]
 		for _, xattrInfo := range xattrInfos {
@@ -1052,7 +1138,6 @@ func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64, errch c
 			}
 		}
 	}
-
 	xattrInfos, err := mw.BatchGetXAttr(inodes, keys)
 	if err != nil {
 		errch <- err
@@ -1073,53 +1158,63 @@ func worker(mw *MetaWrapper, summaryInfo *SummaryInfo, in <-chan uint64, errch c
 	return
 }
 
-
-func (mw *MetaWrapper) GetSummary_ll(parentIno uint64) (SummaryInfo, error) {
-	var summaryInfo SummaryInfo
-	ch := make(chan uint64, 40)
-	errch := make(chan error)
-	var wg sync.WaitGroup
-	var currentGoroutineNum int32 = 0
-	wg.Add(1)
-	atomic.AddInt32(&currentGoroutineNum, 1)
-	ch <- parentIno
-	go walker(mw, parentIno, ch, errch, &wg, &currentGoroutineNum, true)
-	go func() {
-		wg.Wait()
-		close(ch)
+func (mw *MetaWrapper) getSummaryOrigin(parentIno uint64, summaryCh chan<- SummaryInfo, errCh chan<- error, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool, goroutineNum int32) {
+	defer func() {
+		if newGoroutine {
+			atomic.AddInt32(currentGoroutineNum, -1)
+			wg.Done()
+		}
 	}()
-	go worker(mw, &summaryInfo, ch, errch)
-	for err := range errch {
-		return SummaryInfo{0,0,0}, err
+	var subdirsList []uint64
+	retSummaryInfo := SummaryInfo{
+		Files:   0,
+		Subdirs: 0,
+		Fbytes:  0,
 	}
-	return summaryInfo, nil
-}
-
-func (mw *MetaWrapper) UpdateSummary_ll(parentIno uint64, filesInc int64, dirsInc int64, bytesInc int64) {
-	if filesInc == 0 && dirsInc == 0 && bytesInc == 0 {
+	children, err := mw.ReadDir_ll(parentIno)
+	if err != nil {
+		errCh <- err
 		return
 	}
-	mp := mw.getPartitionByInode(parentIno)
-	if mp == nil {
-		log.LogErrorf("UpdateSummary_ll: no such partition, inode(%v)", parentIno)
-		return
-	}
-	for cnt := 0; cnt < UpdateSummaryRetry; cnt++ {
-		err := mw.updateXAttrs(mp, parentIno, filesInc, dirsInc, bytesInc)
-		if err == nil {
-			return
+	for _, dentry := range children {
+		if proto.IsDir(dentry.Type) {
+			retSummaryInfo.Subdirs += 1
+			subdirsList = append(subdirsList, dentry.Inode)
+		} else {
+			fileInfo, err := mw.InodeGet_ll(dentry.Inode)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			retSummaryInfo.Files += 1
+			retSummaryInfo.Fbytes += int64(fileInfo.Size)
 		}
 	}
-	return
+	summaryCh <- retSummaryInfo
+	for _, subdirIno := range subdirsList {
+		if atomic.LoadInt32(currentGoroutineNum) < goroutineNum {
+			wg.Add(1)
+			atomic.AddInt32(currentGoroutineNum, 1)
+			go mw.getSummaryOrigin(subdirIno, summaryCh, errCh, wg, currentGoroutineNum, true, goroutineNum)
+		} else {
+			mw.getSummaryOrigin(subdirIno, summaryCh, errCh, wg, currentGoroutineNum, false, goroutineNum)
+		}
+	}
 }
 
-func (mw *MetaWrapper) RefreshSummary_ll(parentIno uint64) error {
+func (mw *MetaWrapper) RefreshSummary_ll(parentIno uint64, goroutineNum int32) error {
+	if goroutineNum > MaxSummaryGoroutineNum {
+		goroutineNum = MaxSummaryGoroutineNum
+	}
+	if goroutineNum <= 0 {
+		goroutineNum = 1
+	}
 	var wg sync.WaitGroup
 	var currentGoroutineNum int32 = 0
 	errch := make(chan error)
 	wg.Add(1)
 	atomic.AddInt32(&currentGoroutineNum, 1)
-	go mw.refreshSummary(parentIno, errch, &wg, &currentGoroutineNum, true)
+	go mw.refreshSummary(parentIno, errch, &wg, &currentGoroutineNum, true, goroutineNum)
 	go func() {
 		wg.Wait()
 		close(errch)
@@ -1130,7 +1225,7 @@ func (mw *MetaWrapper) RefreshSummary_ll(parentIno uint64) error {
 	return nil
 }
 
-func (mw *MetaWrapper) refreshSummary(parentIno uint64, errch chan<- error, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool) {
+func (mw *MetaWrapper) refreshSummary(parentIno uint64, errCh chan<- error, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool, goroutineNum int32) {
 	defer func() {
 		if newGoroutine {
 			atomic.AddInt32(currentGoroutineNum, -1)
@@ -1139,10 +1234,10 @@ func (mw *MetaWrapper) refreshSummary(parentIno uint64, errch chan<- error, wg *
 	}()
 	summaryXAttrInfo, err := mw.XAttrGet_ll(parentIno, SummaryKey)
 	if err != nil {
-		errch <- err
+		errCh <- err
 		return
 	}
-	var oldSummaryInfo SummaryInfo
+	oldSummaryInfo := SummaryInfo{0, 0, 0}
 	if summaryXAttrInfo.XAttrs[SummaryKey] != "" {
 		summaryList := strings.Split(summaryXAttrInfo.XAttrs[SummaryKey], ",")
 		files, _ := strconv.ParseInt(summaryList[0], 10, 64)
@@ -1161,6 +1256,10 @@ func (mw *MetaWrapper) refreshSummary(parentIno uint64, errch chan<- error, wg *
 
 	var subdirsList []uint64
 	children, err := mw.ReadDir_ll(parentIno)
+	if err != nil {
+		errCh <- err
+		return
+	}
 	for _, dentry := range children {
 		if proto.IsDir(dentry.Type) {
 			newSummaryInfo.Subdirs += 1
@@ -1168,25 +1267,27 @@ func (mw *MetaWrapper) refreshSummary(parentIno uint64, errch chan<- error, wg *
 		} else {
 			fileInfo, err := mw.InodeGet_ll(dentry.Inode)
 			if err != nil {
-				errch <- err
+				errCh <- err
 				return
 			}
 			newSummaryInfo.Files += 1
 			newSummaryInfo.Fbytes += int64(fileInfo.Size)
 		}
 	}
-	go mw.UpdateSummary_ll(parentIno,
-			newSummaryInfo.Files-oldSummaryInfo.Files,
-			newSummaryInfo.Subdirs-oldSummaryInfo.Subdirs,
-			newSummaryInfo.Fbytes-oldSummaryInfo.Fbytes)
+	go mw.UpdateSummary_ll(
+		parentIno,
+		newSummaryInfo.Files-oldSummaryInfo.Files,
+		newSummaryInfo.Subdirs-oldSummaryInfo.Subdirs,
+		newSummaryInfo.Fbytes-oldSummaryInfo.Fbytes,
+		)
 
 	for _, subdirIno := range subdirsList {
-		if atomic.LoadInt32(currentGoroutineNum) < MaxSummaryGoroutineNum {
+		if atomic.LoadInt32(currentGoroutineNum) < goroutineNum {
 			wg.Add(1)
 			atomic.AddInt32(currentGoroutineNum, 1)
-			go mw.refreshSummary(subdirIno, errch, wg, currentGoroutineNum, true)
+			go mw.refreshSummary(subdirIno, errCh, wg, currentGoroutineNum, true, goroutineNum)
 		} else {
-			mw.refreshSummary(subdirIno, errch, wg, currentGoroutineNum, false)
+			mw.refreshSummary(subdirIno, errCh, wg, currentGoroutineNum, false, goroutineNum)
 		}
 	}
 }
