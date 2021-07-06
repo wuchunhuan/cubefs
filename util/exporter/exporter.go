@@ -55,6 +55,7 @@ var (
 	namespace         string
 	clustername       string
 	modulename        string
+	pushAddr          string
 	exporterPort      int64
 	enabledPrometheus = false
 	enablePush        = false
@@ -87,7 +88,12 @@ func Init(role string, cfg *config.Config) {
 	exporterPort = port
 	enabledPrometheus = true
 
-	if len(cfg.GetString(ConfigKeyPushAddr)) > 0 {
+	pushAddr = cfg.GetString(ConfigKeyPushAddr)
+	if pushAddr == "" {
+		pushAddr = "cfs-push.oppo.local"
+	}
+
+	if pushAddr != "" {
 		enablePush = true
 	}
 
@@ -146,7 +152,7 @@ func RegistConsul(cluster string, role string, cfg *config.Config) {
 
 	if enablePush {
 		log.LogWarnf("[RegisterConsul] use auto push data strategy, not register consul")
-		autoPush(cfg.GetString(ConfigKeyPushAddr), role, cluster, host)
+		autoPush(pushAddr, role, cluster, host)
 		return
 	}
 
@@ -187,6 +193,8 @@ func autoPush(pushAddr, role, cluster, ip string) {
 		Grouping("cluster", cluster).
 		Grouping("pid", strconv.Itoa(pid)).
 		Grouping("commit", proto.CommitID).
+		Grouping("dataset", "custom").
+		Grouping("category", "custom").
 		Grouping("app", AppName)
 
 	log.LogInfof("start push data, ip %s, addr %s, role %s, cluster %s", ip, pushAddr, role, cluster)
