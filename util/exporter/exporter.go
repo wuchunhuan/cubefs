@@ -188,7 +188,12 @@ func autoPush(pushAddr, role, cluster, ip string) {
 
 	pid := os.Getpid()
 
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+
 	pusher := push.New(pushAddr, "cbfs").
+		Client(client).
 		Gatherer(registry).
 		Grouping("cip", ip).
 		Grouping("role", role).
@@ -201,7 +206,7 @@ func autoPush(pushAddr, role, cluster, ip string) {
 
 	log.LogInfof("start push data, ip %s, addr %s, role %s, cluster %s", ip, pushAddr, role, cluster)
 
-	ticker := time.NewTicker(time.Second * 30)
+	ticker := time.NewTicker(time.Second * 15)
 	go func() {
 		for {
 			select {
