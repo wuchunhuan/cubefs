@@ -16,12 +16,13 @@ package exporter
 
 import (
 	"fmt"
-	"github.com/chubaofs/chubaofs/proto"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/chubaofs/chubaofs/proto"
 
 	"github.com/chubaofs/chubaofs/util/config"
 	"github.com/chubaofs/chubaofs/util/log"
@@ -89,9 +90,6 @@ func Init(role string, cfg *config.Config) {
 	enabledPrometheus = true
 
 	pushAddr = cfg.GetString(ConfigKeyPushAddr)
-	if pushAddr == "" {
-		pushAddr = "cfs-push.oppo.local"
-	}
 
 	if pushAddr != "" {
 		enablePush = true
