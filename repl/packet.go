@@ -53,7 +53,7 @@ type FollowerPacket struct {
 func NewFollowerPacket() (fp *FollowerPacket) {
 	fp = new(FollowerPacket)
 	fp.respCh = make(chan error, 1)
-	fp.StartT=time.Now().UnixNano()
+	fp.StartT = time.Now().UnixNano()
 	return fp
 }
 
@@ -67,8 +67,6 @@ func (p *FollowerPacket) PackErrorBody(action, msg string) {
 func (p *FollowerPacket) IsErrPacket() bool {
 	return p.ResultCode != proto.OpOk && p.ResultCode != proto.OpInitResultCode
 }
-
-
 
 func (p *FollowerPacket) identificationErrorResultCode(errLog string, errMsg string) {
 	if strings.Contains(errLog, ActionReceiveFromFollower) || strings.Contains(errLog, ActionSendToFollowers) ||
@@ -94,7 +92,7 @@ func (p *FollowerPacket) identificationErrorResultCode(errLog string, errMsg str
 }
 
 func (p *Packet) AfterTp() (ok bool) {
-	if p.TpObject!=nil{
+	if p.TpObject != nil {
 		p.TpObject.Set(nil)
 	}
 
@@ -131,12 +129,11 @@ func copyPacket(src *Packet, dst *FollowerPacket) {
 
 }
 
-
 func (p *Packet) BeforeTp(clusterID string) (ok bool) {
 	if p.IsForwardPkt() && !p.IsRandomWrite() {
-		p.TpObject = exporter.NewTPCnt(fmt.Sprintf("PrimaryBackUp_%v",p.GetOpMsg()))
-	}else if p.IsRandomWrite(){
-		p.TpObject = exporter.NewTPCnt(fmt.Sprintf("Raft_%v",p.GetOpMsg()))
+		p.TpObject = exporter.NewTPCnt(fmt.Sprintf("PrimaryBackUp_%v", p.GetOpMsg()))
+	} else if p.IsRandomWrite() {
+		p.TpObject = exporter.NewTPCnt(fmt.Sprintf("Raft_%v", p.GetOpMsg()))
 	}
 
 	return
@@ -377,13 +374,19 @@ func (p *Packet) IsMasterCommand() bool {
 }
 
 func (p *Packet) IsForwardPacket() bool {
-	r := p.RemainingFollowers > 0
+	r := p.RemainingFollowers > 0 && !p.IsSingleReplicatePacket()
+	return r
+}
+
+func (p *Packet) IsSingleReplicatePacket() bool {
+	r := p.RemainingFollowers == 127
 	return r
 }
 
 // A leader packet is the packet send to the leader and does not require packet forwarding.
 func (p *Packet) IsLeaderPacket() (ok bool) {
-	if p.IsForwardPkt() && (p.IsWriteOperation() || p.IsCreateExtentOperation() || p.IsMarkDeleteExtentOperation()) {
+	if (p.IsForwardPkt() || p.IsSingleReplicatePacket()) &&
+		(p.IsWriteOperation() || p.IsCreateExtentOperation() || p.IsMarkDeleteExtentOperation()) {
 		ok = true
 	}
 
@@ -407,7 +410,7 @@ func (p *Packet) IsMarkDeleteExtentOperation() bool {
 }
 
 func (p *Packet) IsBatchDeleteExtents() bool {
-	return  p.Opcode==proto.OpBatchDeleteExtent
+	return p.Opcode == proto.OpBatchDeleteExtent
 }
 
 func (p *Packet) IsBroadcastMinAppliedID() bool {
