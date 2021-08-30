@@ -857,7 +857,7 @@ func (c *Cluster) handleDataNodeHeartbeatResp(nodeAddr string, resp *proto.DataN
 		goto errHandler
 	}
 	if dataNode.ToBeOffline {
-		return
+		// return
 	}
 	if resp.ZoneName == "" {
 		resp.ZoneName = DefaultZoneName

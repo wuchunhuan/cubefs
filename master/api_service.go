@@ -495,12 +495,21 @@ func (m *Server) decommissionDataPartition(w http.ResponseWriter, r *http.Reques
 		sendErrReply(w, r, newErrHTTPReply(proto.ErrDataPartitionNotExists))
 		return
 	}
+	if dp.isSingleReplica() {
+		rstMsg = fmt.Sprintf(proto.AdminDecommissionDataPartition+" dataPartitionID :%v  is single replica on node:%v async running,need check later",
+					partitionID, addr)
+		go m.cluster.decommissionDataPartition(addr, dp, handleDataPartitionOfflineErr)
+		sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
+		return
+	}
 	if err = m.cluster.decommissionDataPartition(addr, dp, handleDataPartitionOfflineErr); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
-	rstMsg = fmt.Sprintf(proto.AdminDecommissionDataPartition+" dataPartitionID :%v  on node:%v successfully", partitionID, addr)
-	sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
+	if !dp.isSingleReplica() {
+		rstMsg = fmt.Sprintf(proto.AdminDecommissionDataPartition+" dataPartitionID :%v  on node:%v successfully", partitionID, addr)
+		sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
+	}
 }
 
 func (m *Server) diagnoseDataPartition(w http.ResponseWriter, r *http.Request) {
