@@ -80,32 +80,34 @@ func Init(role string, cfg *config.Config) {
 	EnablePid = cfg.GetBoolWithDefault(ConfigKeyEnablePid, false)
 	log.LogInfo("enable report partition id info? ", EnablePid)
 
+	pushAddr = cfg.GetString(ConfigKeyPushAddr)
+	if pushAddr != "" {
+		enablePush = true
+	}
+
 	port := cfg.GetInt64(ConfigKeyExporterPort)
-	if port == 0 {
-		log.LogInfof("%v exporter port not set, use default 17510", port)
-		port = 17510
+	if port == 0 && !enablePush {
+		log.LogInfof("%v exporter port and pushAddr not set", port)
+		return
 	}
 
 	exporterPort = port
 	enabledPrometheus = true
-
-	pushAddr = cfg.GetString(ConfigKeyPushAddr)
-
-	if pushAddr != "" {
-		enablePush = true
-	}
 
 	http.Handle(PromHandlerPattern, promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
 		Timeout: 5 * time.Second,
 	}))
 	namespace = AppName + "_" + role
 	addr := fmt.Sprintf(":%d", port)
-	go func() {
-		err := http.ListenAndServe(addr, nil)
-		if err != nil {
-			log.LogError("exporter http serve error: ", err)
-		}
-	}()
+
+	if port != 0 {
+		go func() {
+			err := http.ListenAndServe(addr, nil)
+			if err != nil {
+				log.LogError("exporter http serve error: ", err)
+			}
+		}()
+	}
 
 	collect()
 
