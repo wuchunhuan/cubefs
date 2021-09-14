@@ -16,6 +16,7 @@ package master
 
 import (
 	"fmt"
+	"github.com/chubaofs/chubaofs/datanode"
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/util"
 	"github.com/chubaofs/chubaofs/util/log"
@@ -40,6 +41,17 @@ func (partition *DataPartition) checkStatus(clusterName string, needLog bool, dp
 		partition.Status = proto.ReadOnly
 		if partition.checkReplicaStatusOnLiveNode(liveReplicas) == true && partition.canWrite() {
 			partition.Status = proto.ReadWrite
+		}
+	case (int)(partition.ReplicaNum) + 1:
+		if partition.SingleDecommissionStatus == datanode.DecommsionWaitAddRes {
+			partition.Status = proto.ReadOnly
+			if partition.checkReplicaStatusOnLiveNode(liveReplicas) == true && partition.canWrite() {
+				partition.SingleDecommissionStatus = datanode.DecommsionWaitAddResFin
+			 	log.LogInfof("action[checkStatus] partition %v with single replica on decommison and continue to remove old replica",
+					partition.PartitionID)
+				// partition.Status = proto.ReadWrite
+				partition.singleDecommissionChan <- true
+			}
 		}
 	default:
 		partition.Status = proto.ReadOnly
@@ -66,6 +78,7 @@ func (partition *DataPartition) canWrite() bool {
 func (partition *DataPartition) checkReplicaStatusOnLiveNode(liveReplicas []*DataReplica) (equal bool) {
 	for _, replica := range liveReplicas {
 		if replica.Status != proto.ReadWrite {
+			log.LogInfof("action[checkReplicaStatusOnLiveNode] partition %v replica %v status %v", partition.PartitionID, replica.Addr, replica.Status)
 			return
 		}
 	}
@@ -78,6 +91,7 @@ func (partition *DataPartition) checkReplicaStatus(timeOutSec int64) {
 	defer partition.Unlock()
 	for _, replica := range partition.Replicas {
 		if !replica.isLive(timeOutSec) {
+			log.LogInfof("action[checkReplicaStatusOnLiveNode] partition %v replica %v be set status ReadOnly", partition.PartitionID, replica.Addr)
 			replica.Status = proto.ReadOnly
 		}
 	}
