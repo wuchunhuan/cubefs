@@ -73,7 +73,7 @@ func newDataPartition(ID uint64, replicaNum uint8, volName string, volID uint64)
 	partition.modifyTime = time.Now().Unix()
 	partition.createTime = time.Now().Unix()
 	partition.lastWarnTime = time.Now().Unix()
-	partition.singleDecommissionChan = make(chan bool, 1)
+	partition.singleDecommissionChan = make(chan bool, 1024)
 	return
 }
 
@@ -653,7 +653,8 @@ func (partition *DataPartition) getToBeDecommissionHost(replicaNum int) (host st
 
 	// single decommission info not store to meta, once restart just delete new added host
 	if partition.isSingleReplica() && partition.SingleDecommissionStatus == datanode.DecommsionErr {
-		log.LogInfof("action[getToBeDecommissionHost] get single replica partition %v need to decommission", partition.PartitionID)
+		log.LogInfof("action[getToBeDecommissionHost] get single replica partition %v need to decommission %v",
+			partition.PartitionID, partition.SingleDecommissionAddr)
 		host = partition.SingleDecommissionAddr
 		return
 	}

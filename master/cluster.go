@@ -1150,6 +1150,9 @@ func (c *Cluster) decommissionSingleDp(dp *DataPartition, newAddr, offlineAddr s
 	const retryTimes = 100
 	var dataNode *DataNode
 
+	times := 0
+	decommContinue := false
+
 	ticker := time.NewTicker(time.Second * time.Duration(30))
 	defer func() {
 		ticker.Stop()
@@ -1159,25 +1162,40 @@ func (c *Cluster) decommissionSingleDp(dp *DataPartition, newAddr, offlineAddr s
 	dp.SingleDecommissionStatus = datanode.DecommsionWaitAddRes
 	dp.SingleDecommissionAddr = newAddr
 	if err = c.addDataReplica(dp, newAddr); err != nil {
-		log.LogInfof("action[decommissionSingleDp] dp %v addDataReplica fail err %v", err)
-		return err
+		err = fmt.Errorf("action[decommissionSingleDp] dp %v addDataReplica fail err %v", err)
+		goto ERR
 	}
-	log.LogInfof("action[decommissionSingleDp] dp %v start wait add replica %v", dp.PartitionID, newAddr)
-	decommContinue := <-dp.singleDecommissionChan
-	if !decommContinue {
-		log.LogInfof("action[decommissionSingleDp] dp %v decommContinue false")
-		return fmt.Errorf("action[decommissionSingleDp] dp %v decommContinue false")
+
+	log.LogWarnf("action[decommissionSingleDp] dp %v start wait add replica %v", dp.PartitionID, newAddr)
+
+	for {
+		times++
+		select {
+		case decommContinue = <-dp.singleDecommissionChan:
+			if !decommContinue {
+				err = fmt.Errorf("action[decommissionSingleDp] dp %v addDataReplica get result decommContinue false")
+				goto ERR
+			}
+		case <-ticker.C:
+			err = fmt.Errorf("action[decommissionSingleDp] dp %v wait addDataReplica result addr %v timeout %v times", dp.PartitionID, newAddr, times)
+			log.LogWarnf("%v", err)
+		}
+		if decommContinue == true {
+			break
+		}
+		if times == retryTimes {
+			err = fmt.Errorf("action[decommissionSingleDp] dp %v wait addDataReplica result addr %v timeout", dp.PartitionID, newAddr)
+			goto ERR
+		}
 	}
 
 	if dataNode, err = c.dataNode(newAddr); err != nil {
-		return fmt.Errorf("action[decommissionSingleDp] dp %v get offlineAddr %v err %v", dp.PartitionID, newAddr, err)
+		err = fmt.Errorf("action[decommissionSingleDp] dp %v get offlineAddr %v err %v", dp.PartitionID, newAddr, err)
+		log.LogErrorf("%v", err)
 	}
-
-	log.LogErrorf("action[decommissionSingleDp] dp %v try change leader %v to %v ", dp.PartitionID, dp.getLeaderAddr(), newAddr)
 
 	for i:=0;  i < retryTimes; i++ {
 		if dp.getLeaderAddr() == newAddr {
-			err = fmt.Errorf("action[decommissionSingleDp] dp %v leader is newaddr %v ", dp.PartitionID, newAddr)
 			err = nil
 			break
 		}
@@ -1190,22 +1208,34 @@ func (c *Cluster) decommissionSingleDp(dp *DataPartition, newAddr, offlineAddr s
 		select {
 		case <-ticker.C:
 			log.LogInfof("action[decommissionSingleDp] dp %v tryToChangeLeader addr %v again", dp.PartitionID, newAddr)
+		case decommContinue = <-dp.singleDecommissionChan:
+			if !decommContinue {
+				err = fmt.Errorf("action[decommissionSingleDp] dp %v addDataReplica get result decommContinue false")
+				goto ERR
+			}
 		}
 	}
+
 	if dp.getLeaderAddr() != newAddr {
-		return fmt.Errorf("action[decommissionSingleDp] dp %v err %v", dp.PartitionID, err)
+		err = fmt.Errorf("action[decommissionSingleDp] dp %v  change leader failed", dp.PartitionID)
+		goto ERR
 	}
 
 	log.LogInfof("action[decommissionSingleDp] dp %v try removeDataReplica %v", dp.PartitionID, offlineAddr)
 	dp.SingleDecommissionStatus = datanode.DecommsionRemoveOld
 	dp.SingleDecommissionAddr = offlineAddr
-	if err = c.removeDataReplica(dp, offlineAddr, false); err != nil {
-		log.LogInfof("action[decommissionSingleDp] dp %v err %v", dp.PartitionID, err)
-		return err
-	}
-	log.LogInfof("action[decommissionSingleDp] dp %v success", dp.PartitionID)
-	return
 
+
+	if err = c.removeDataReplica(dp, offlineAddr, false); err != nil {
+		err = fmt.Errorf("action[decommissionSingleDp] dp %v err %v", dp.PartitionID, err)
+		goto ERR
+	}
+	log.LogWarnf("action[decommissionSingleDp] dp %v success", dp.PartitionID)
+	return
+ERR:
+	dp.SingleDecommissionStatus = datanode.DecommsionErr
+	log.LogErrorf("%v", err)
+	return err
 }
 
 // Decommission a data partition.
@@ -1242,8 +1272,8 @@ func (c *Cluster) decommissionDataPartition(offlineAddr string, dp *DataPartitio
 			dp.RUnlock()
 			return
 		}
+		dp.SingleDecommissionStatus = datanode.DecommsionEnter
 	}
-	dp.SingleDecommissionStatus = datanode.DecommsionEnter
 
 	replica, _ = dp.getReplica(offlineAddr)
 	dp.RUnlock()
@@ -1318,7 +1348,6 @@ func (c *Cluster) decommissionDataPartition(offlineAddr string, dp *DataPartitio
 	dp.SingleDecommissionStatus = 0
 	return
 errHandler:
-	dp.SingleDecommissionStatus = datanode.DecommsionErr
 	msg = fmt.Sprintf(errMsg+" clusterID[%v] partitionID:%v  on Node:%v  "+
 		"Then Fix It on newHost:%v   Err:%v , PersistenceHosts:%v  ",
 		c.Name, dp.PartitionID, offlineAddr, newAddr, err, dp.Hosts)
