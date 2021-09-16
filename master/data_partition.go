@@ -591,7 +591,7 @@ func (partition *DataPartition) getMaxUsedSpace() uint64 {
 }
 
 func (partition *DataPartition) afterCreation(nodeAddr, diskPath string, c *Cluster) (err error) {
-	log.LogInfof("action[afterCreation] dp %v nodeaddr %v replica be set ReadWrite", partition.PartitionID, nodeAddr)
+	log.LogInfof("action[afterCreation] dp %v nodeaddr %v replica be set Unavailable", partition.PartitionID, nodeAddr)
 	dataNode, err := c.dataNode(nodeAddr)
 	if err != nil {
 		return err
