@@ -617,6 +617,10 @@ func (m *Server) updateVol(w http.ResponseWriter, r *http.Request) {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
+	if vol.dpReplicaNum == 1 && !followerRead {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: "single replica must enable follower read"})
+		return
+	}
 
 	newArgs := getVolVarargs(vol)
 
@@ -1954,6 +1958,11 @@ func parseRequestToCreateVol(r *http.Request) (name, owner, zoneName, descriptio
 	}
 
 	if followerRead, err = extractFollowerRead(r); err != nil {
+		return
+	}
+
+	if !followerRead && dpReplicaNum == 1 {
+		err = fmt.Errorf("single replica must enable followerRead")
 		return
 	}
 
