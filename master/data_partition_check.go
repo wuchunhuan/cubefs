@@ -45,7 +45,7 @@ func (partition *DataPartition) checkStatus(clusterName string, needLog bool, dp
 	case (int)(partition.ReplicaNum) + 1:
 		if partition.SingleDecommissionStatus == datanode.DecommsionWaitAddRes {
 			partition.Status = proto.ReadOnly
-			if partition.checkReplicaStatusOnLiveNode(liveReplicas) == true && partition.canWrite() {
+			if partition.checkReplicaStatusOnLiveNode(liveReplicas) == true {
 				partition.SingleDecommissionStatus = datanode.DecommsionWaitAddResFin
 			 	log.LogInfof("action[checkStatus] partition %v with single replica on decommison and continue to remove old replica",
 					partition.PartitionID)
@@ -92,6 +92,9 @@ func (partition *DataPartition) checkReplicaStatus(timeOutSec int64) {
 	for _, replica := range partition.Replicas {
 		if !replica.isLive(timeOutSec) {
 			log.LogInfof("action[checkReplicaStatusOnLiveNode] partition %v replica %v be set status ReadOnly", partition.PartitionID, replica.Addr)
+			if partition.isSingleReplica() {
+				return
+			}
 			replica.Status = proto.ReadOnly
 		}
 	}

@@ -99,7 +99,7 @@ func (dp *DataPartition) repair(extentType uint8) {
 		dp.moveToBrokenTinyExtentC(extentType, tinyExtents)
 		return
 	}
-
+	log.LogInfof("action[repair] partition(%v) before prepareRepairTasks", dp.partitionID)
 	// compare all the extents in the replicas to compute the good and bad ones
 	availableTinyExtents, brokenTinyExtents := dp.prepareRepairTasks(repairTasks)
 
@@ -139,6 +139,7 @@ func (dp *DataPartition) buildDataPartitionRepairTask(repairTasks []*DataPartiti
 		return err
 	}
 	// new repair task for the leader
+	log.LogInfof("buildDataPartitionRepairTask dp %v, extent type %v, len extent %v, replica size %v", dp.partitionID, extentType, len(extents), len(replica))
 	repairTasks[0] = NewDataPartitionRepairTask(extents, leaderTinyDeleteRecordFileSize, replica[0], replica[0])
 	repairTasks[0].addr = replica[0]
 
@@ -149,6 +150,7 @@ func (dp *DataPartition) buildDataPartitionRepairTask(repairTasks []*DataPartiti
 			log.LogErrorf("buildDataPartitionRepairTask PartitionID(%v) on (%v) err(%v)", dp.partitionID, replica[index], err)
 			continue
 		}
+		log.LogInfof("buildDataPartitionRepairTask dp %v,add new add %v,  extent type %v",  dp.partitionID, replica[index], extentType)
 		repairTasks[index] = NewDataPartitionRepairTask(extents, leaderTinyDeleteRecordFileSize, replica[index], replica[0])
 		repairTasks[index].addr = replica[index]
 	}
@@ -294,6 +296,7 @@ func (dp *DataPartition) brokenTinyExtents() (brokenTinyExtents []uint64) {
 func (dp *DataPartition) prepareRepairTasks(repairTasks []*DataPartitionRepairTask) (availableTinyExtents []uint64, brokenTinyExtents []uint64) {
 	extentInfoMap := make(map[uint64]*storage.ExtentInfo)
 	deleteExtents := make(map[uint64]bool)
+	log.LogInfof("action[prepareRepairTasks] dp %v task len %v", dp.partitionID, len(repairTasks))
 	for index := 0; index < len(repairTasks); index++ {
 		repairTask := repairTasks[index]
 		if repairTask == nil {

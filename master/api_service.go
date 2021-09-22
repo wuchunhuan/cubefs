@@ -607,14 +607,19 @@ func (m *Server) updateVol(w http.ResponseWriter, r *http.Request) {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if replicaNum != 0 && !(replicaNum == 2 || replicaNum == 3) {
-		err = fmt.Errorf("replicaNum can only be 2 and 3,received replicaNum is[%v]", replicaNum)
+
+	if replicaNum != 0 && replicaNum != int(vol.dpReplicaNum) {
+		err = fmt.Errorf("replicaNum cann't be changed")
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
 
 	if followerRead, authenticate, err = parseBoolFieldToUpdateVol(r, vol); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	if vol.dpReplicaNum == 1 && !followerRead {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: "single replica must enable follower read"})
 		return
 	}
 
@@ -1919,6 +1924,7 @@ func parseRequestToCreateVol(r *http.Request) (name, owner, zoneName, descriptio
 	capacity int, followerRead,
 	authenticate, crossZone, defaultPriority bool,
 	err error) {
+
 	if err = r.ParseForm(); err != nil {
 		return
 	}
@@ -1952,9 +1958,17 @@ func parseRequestToCreateVol(r *http.Request) (name, owner, zoneName, descriptio
 	if capacity, err = extractCapacity(r); err != nil {
 		return
 	}
-
-	if followerRead, err = extractFollowerRead(r); err != nil {
+	var isExist bool
+	if followerRead, isExist, err = extractFollowerRead(r); err != nil {
 		return
+	}
+
+	if isExist && !followerRead && dpReplicaNum == 1 {
+		err = fmt.Errorf("single replica must enable followerRead")
+		return
+	}
+	if dpReplicaNum == 1 {
+		followerRead = true
 	}
 
 	if authenticate, err = extractAuthenticate(r); err != nil {
@@ -2125,12 +2139,13 @@ func extractStatus(r *http.Request) (status bool, err error) {
 	return
 }
 
-func extractFollowerRead(r *http.Request) (followerRead bool, err error) {
+func extractFollowerRead(r *http.Request) (followerRead bool, exist bool, err error) {
 	var value string
 	if value = r.FormValue(followerReadKey); value == "" {
 		followerRead = false
 		return
 	}
+	exist = true
 	if followerRead, err = strconv.ParseBool(value); err != nil {
 		return
 	}
