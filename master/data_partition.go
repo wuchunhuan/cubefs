@@ -652,10 +652,12 @@ func (partition *DataPartition) getToBeDecommissionHost(replicaNum int) (host st
 	defer partition.RUnlock()
 
 	// single decommission info not store to meta, once restart just delete new added host
-	if partition.isSingleReplica() && partition.SingleDecommissionStatus == datanode.DecommsionErr {
-		log.LogInfof("action[getToBeDecommissionHost] get single replica partition %v need to decommission %v",
-			partition.PartitionID, partition.SingleDecommissionAddr)
-		host = partition.SingleDecommissionAddr
+	if partition.isSingleReplica() && partition.SingleDecommissionStatus > 0 {
+		if partition.SingleDecommissionStatus == datanode.DecommsionErr {
+			log.LogInfof("action[getToBeDecommissionHost] get single replica partition %v need to decommission %v",
+				partition.PartitionID, partition.SingleDecommissionAddr)
+			host = partition.SingleDecommissionAddr
+		}
 		return
 	}
 	hostLen := len(partition.Hosts)

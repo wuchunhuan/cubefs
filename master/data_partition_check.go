@@ -39,23 +39,33 @@ func (partition *DataPartition) checkStatus(clusterName string, needLog bool, dp
 	switch len(liveReplicas) {
 	case (int)(partition.ReplicaNum):
 		partition.Status = proto.ReadOnly
-		if partition.checkReplicaStatusOnLiveNode(liveReplicas) == true && partition.canWrite() {
+		if partition.checkReplicaEqualStatus(liveReplicas, proto.ReadWrite) == true && partition.canWrite() {
 			partition.Status = proto.ReadWrite
 		}
-	case (int)(partition.ReplicaNum) + 1:
+	default:
+		partition.Status = proto.ReadOnly
+	}
+
+	if partition.isSingleReplica() && partition.SingleDecommissionStatus > 0 {
+		log.LogInfof("action[checkStatus] partition %v with single replica on decommison status %v",
+			partition.PartitionID, partition.Status)
+		partition.Status = proto.ReadOnly
 		if partition.SingleDecommissionStatus == datanode.DecommsionWaitAddRes {
-			partition.Status = proto.ReadOnly
-			if partition.checkReplicaStatusOnLiveNode(liveReplicas) == true {
+			if len(liveReplicas) == 2 && partition.checkReplicaNotHaveStatus(liveReplicas, proto.Unavailable) == true {
 				partition.SingleDecommissionStatus = datanode.DecommsionWaitAddResFin
-			 	log.LogInfof("action[checkStatus] partition %v with single replica on decommison and continue to remove old replica",
+				log.LogInfof("action[checkStatus] partition %v with single replica on decommison and continue to remove old replica",
 					partition.PartitionID)
 				// partition.Status = proto.ReadWrite
 				partition.singleDecommissionChan <- true
 			}
 		}
-	default:
-		partition.Status = proto.ReadOnly
 	}
+
+	if partition.checkReplicaEqualStatus(liveReplicas, proto.Unavailable) {
+		log.LogWarnf("action[checkStatus] partition %v bet set Unavailable", partition.PartitionID)
+		partition.Status = proto.Unavailable
+	}
+
 	if needLog == true && len(liveReplicas) != int(partition.ReplicaNum) {
 		msg := fmt.Sprintf("action[extractStatus],partitionID:%v  replicaNum:%v  liveReplicas:%v   Status:%v  RocksDBHost:%v ",
 			partition.PartitionID, partition.ReplicaNum, len(liveReplicas), partition.Status, partition.Hosts)
@@ -75,10 +85,22 @@ func (partition *DataPartition) canWrite() bool {
 	return false
 }
 
-func (partition *DataPartition) checkReplicaStatusOnLiveNode(liveReplicas []*DataReplica) (equal bool) {
+func (partition *DataPartition) checkReplicaNotHaveStatus(liveReplicas []*DataReplica, status int8) (equal bool) {
 	for _, replica := range liveReplicas {
-		if replica.Status != proto.ReadWrite {
-			log.LogInfof("action[checkReplicaStatusOnLiveNode] partition %v replica %v status %v", partition.PartitionID, replica.Addr, replica.Status)
+		if replica.Status == status {
+			log.LogInfof("action[checkReplicaNotHaveStatus] partition %v replica %v status %v dst status %v",
+				partition.PartitionID, replica.Addr, replica.Status, status)
+			return
+		}
+	}
+
+	return true
+}
+func (partition *DataPartition) checkReplicaEqualStatus(liveReplicas []*DataReplica, status int8) (equal bool) {
+	for _, replica := range liveReplicas {
+		if replica.Status != status {
+			log.LogInfof("action[checkReplicaEqualStatus] partition %v replica %v status %v dst status %v",
+				partition.PartitionID, replica.Addr, replica.Status, status)
 			return
 		}
 	}
@@ -91,7 +113,7 @@ func (partition *DataPartition) checkReplicaStatus(timeOutSec int64) {
 	defer partition.Unlock()
 	for _, replica := range partition.Replicas {
 		if !replica.isLive(timeOutSec) {
-			log.LogInfof("action[checkReplicaStatusOnLiveNode] partition %v replica %v be set status ReadOnly", partition.PartitionID, replica.Addr)
+			log.LogInfof("action[checkReplicaStatus] partition %v replica %v be set status ReadOnly", partition.PartitionID, replica.Addr)
 			if partition.isSingleReplica() {
 				return
 			}
@@ -179,6 +201,11 @@ func (partition *DataPartition) checkDiskError(clusterID, leaderAddr string) {
 			continue
 		}
 		if replica.Status == proto.Unavailable {
+			if partition.isSingleReplica() && len(partition.Hosts) > 1 {
+				log.LogWarnf("action[%v],clusterID[%v],partitionID:%v  On :%v status Unavailable",
+					checkDataPartitionDiskErr, clusterID, partition.PartitionID, addr)
+				continue
+			}
 			diskErrorAddrs[replica.Addr] = replica.DiskPath
 		}
 	}
