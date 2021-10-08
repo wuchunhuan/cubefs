@@ -414,7 +414,7 @@ func (eh *ExtentHandler) appendExtentKey() (err error) {
 				eh.stream.extents.RemoveDiscard(discard)
 			}
 		} else {
-			//_ = eh.stream.extents.Append(eh.key, false)
+			_ = eh.stream.extents.Append(eh.key, false)
 		}
 	}
 	if err == nil {
