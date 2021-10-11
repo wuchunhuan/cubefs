@@ -651,6 +651,9 @@ func cfs_getsummary(id C.int64_t, path *C.char, summary *C.struct_cfs_summary_in
 	if !exist {
 		return statusEINVAL
 	}
+	if !c.enableSummary {
+		return statusEINVAL
+	}
 
 	info, err := c.lookupPath(c.absPath(C.GoString(path)))
 	if err != nil {
