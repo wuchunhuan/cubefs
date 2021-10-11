@@ -497,7 +497,7 @@ func (m *Server) decommissionDataPartition(w http.ResponseWriter, r *http.Reques
 	}
 	if dp.isSingleReplica() {
 		rstMsg = fmt.Sprintf(proto.AdminDecommissionDataPartition+" dataPartitionID :%v  is single replica on node:%v async running,need check later",
-					partitionID, addr)
+			partitionID, addr)
 		go m.cluster.decommissionDataPartition(addr, dp, handleDataPartitionOfflineErr)
 		sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
 		return
@@ -926,6 +926,32 @@ func (m *Server) decommissionDataNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rstMsg = fmt.Sprintf("decommission data node [%v] successfully", offLineAddr)
+	sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
+}
+
+// Decommission a data node. This will decommission all the data partition on that node.
+func (m *Server) cancelDecommissionDataNode(w http.ResponseWriter, r *http.Request) {
+	var (
+		node        *DataNode
+		rstMsg      string
+		offLineAddr string
+		err         error
+	)
+
+	if offLineAddr, err = parseAndExtractNodeAddr(r); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+
+	if node, err = m.cluster.dataNode(offLineAddr); err != nil {
+		sendErrReply(w, r, newErrHTTPReply(proto.ErrDataNodeNotExists))
+		return
+	}
+	if err = m.cluster.decommissionCancel(node); err != nil {
+		sendErrReply(w, r, newErrHTTPReply(err))
+		return
+	}
+	rstMsg = fmt.Sprintf("cancel decommission data node [%v] successfully", offLineAddr)
 	sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
 }
 

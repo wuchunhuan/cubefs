@@ -229,9 +229,15 @@ func (m *Server) registerAPIRoutes(router *mux.Router) {
 	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
 		Path(proto.AddDataNode).
 		HandlerFunc(m.addDataNode)
+
 	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
 		Path(proto.DecommissionDataNode).
 		HandlerFunc(m.decommissionDataNode)
+
+	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
+		Path(proto.CancelDecommissionDataNode).
+		HandlerFunc(m.cancelDecommissionDataNode)
+
 	router.NewRoute().Methods(http.MethodGet).
 		Path(proto.GetDataNode).
 		HandlerFunc(m.getDataNode)
@@ -252,7 +258,7 @@ func (m *Server) registerAPIRoutes(router *mux.Router) {
 		HandlerFunc(m.getAllNodeSetGrpInfoHandler)
 	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
 		Path(proto.AdminGetNodeSetGrpInfo).
-        HandlerFunc(m.getNodeSetGrpInfoHandler)
+		HandlerFunc(m.getNodeSetGrpInfoHandler)
 	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
 		Path(proto.AdminUpdateNodeSetCapcity).
 		HandlerFunc(m.updateNodeSetCapacityHandler)

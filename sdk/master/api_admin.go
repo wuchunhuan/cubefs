@@ -63,10 +63,10 @@ func (api *AdminAPI) ListZones() (zoneViews []*proto.ZoneView, err error) {
 	}
 	return
 }
-func (api *AdminAPI) Topo() (topo *proto.TopologyView, err error ){
+func (api *AdminAPI) Topo() (topo *proto.TopologyView, err error) {
 	var buf []byte
 	var request = newAPIRequest(http.MethodGet, proto.GetTopologyView)
-	if buf, err = api.mc.serveRequest(request); err != nil{
+	if buf, err = api.mc.serveRequest(request); err != nil {
 		return
 	}
 	topo = &proto.TopologyView{}
@@ -86,6 +86,20 @@ func (api *AdminAPI) GetDataPartition(volName string, partitionID uint64) (parti
 	}
 	partition = &proto.DataPartitionInfo{}
 	if err = json.Unmarshal(buf, &partition); err != nil {
+		return
+	}
+	return
+}
+
+func (api *AdminAPI) GetDataPartitionById(partitionID uint64) (partition *proto.DataPartitionInfo, err error) {
+	var request = newAPIRequest(http.MethodGet, proto.AdminGetDataPartition)
+	request.addParam("id", strconv.Itoa(int(partitionID)))
+	var data []byte
+	if data, err = api.mc.serveRequest(request); err != nil {
+		return
+	}
+	partition = &proto.DataPartitionInfo{}
+	if err = json.Unmarshal(data, partition); err != nil {
 		return
 	}
 	return
