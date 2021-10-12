@@ -1196,23 +1196,28 @@ func (c *Cluster) decommissionSingleDp(dp *DataPartition, newAddr, offlineAddr s
 		case <-ticker.C:
 			err = fmt.Errorf("action[decommissionSingleDp] dp %v wait addDataReplica result addr %v timeout %v times", dp.PartitionID, newAddr, times)
 			log.LogWarnf("%v", err)
+			if !c.partition.IsRaftLeader() {
+				err = fmt.Errorf("action[decommissionSingleDp] dp %v wait addDataReplica result addr %v master leader changed", dp.PartitionID, newAddr)
+				goto ERR
+			}
 		}
 		if decommContinue == true {
 			break
 		}
 	}
-
+	if !c.partition.IsRaftLeader() {
+		err = fmt.Errorf("action[decommissionSingleDp] dp %v wait addDataReplica result addr %v master leader changed", dp.PartitionID, newAddr)
+		goto ERR
+	}
 	if dataNode, err = c.dataNode(newAddr); err != nil {
 		err = fmt.Errorf("action[decommissionSingleDp] dp %v get offlineAddr %v err %v", dp.PartitionID, newAddr, err)
 		log.LogErrorf("%v", err)
 	}
-
 	for {
 		if dp.getLeaderAddr() == newAddr {
 			err = nil
 			break
 		}
-
 		log.LogInfof("action[decommissionSingleDp] dp %v try tryToChangeLeader addr %v", dp.PartitionID, newAddr)
 		if err = dp.tryToChangeLeader(c, dataNode); err != nil {
 			log.LogInfof("action[decommissionSingleDp] dp %v ChangeLeader to addr %v err %v", dp.PartitionID, newAddr, err)
@@ -1221,12 +1226,20 @@ func (c *Cluster) decommissionSingleDp(dp *DataPartition, newAddr, offlineAddr s
 		select {
 		case <-ticker.C:
 			log.LogInfof("action[decommissionSingleDp] dp %v tryToChangeLeader addr %v again", dp.PartitionID, newAddr)
+			if !c.partition.IsRaftLeader() {
+				err = fmt.Errorf("action[decommissionSingleDp] dp %v wait tryToChangeLeader  addr %v master leader changed", dp.PartitionID, newAddr)
+				goto ERR
+			}
 		case decommContinue = <-dp.singleDecommissionChan:
 			if !decommContinue {
-				err = fmt.Errorf("action[decommissionSingleDp] dp %v addDataReplica get result decommContinue false", dp.PartitionID)
+				err = fmt.Errorf("action[decommissionSingleDp] dp %v tryToChangeLeader get result decommContinue false", dp.PartitionID)
 				goto ERR
 			}
 		}
+	}
+	if !c.partition.IsRaftLeader() {
+		err = fmt.Errorf("action[decommissionSingleDp] dp %v wait tryToChangeLeader addr %v master leader changed", dp.PartitionID, newAddr)
+		goto ERR
 	}
 
 	if dp.getLeaderAddr() != newAddr {

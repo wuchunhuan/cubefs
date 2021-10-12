@@ -121,11 +121,16 @@ func (s *raft) stopSnapping() {
 func (s *raft) sendSnapshot(m *proto.Message) {
 	util.RunWorker(func() {
 		defer func() {
+			logger.Debug(" [raft] [%v term: %d] raftFm[%p] raftReplicas[%v] stop send snapshot "+
+				"without the replica from [%v]. to [%v]",
+				s.raftFsm.id, s.raftFsm.term, s.raftFsm, s.raftFsm.getReplicas(), m.Type, m.From, m.To)
 			s.removeSnapping(m.To)
 			m.Snapshot.Close()
 			proto.ReturnMessage(m)
 		}()
-
+		logger.Debug(" [raft] [%v term: %d] raftFm[%p] raftReplicas[%v] send snapshot "+
+			"without the replica from [%v ] to [%v].",
+			s.raftFsm.id, s.raftFsm.term, s.raftFsm, s.raftFsm.getReplicas(), m.Type, m.From, m.To)
 		// send snapshot
 		rs := newSnapshotStatus()
 		s.addSnapping(m.To, rs)
