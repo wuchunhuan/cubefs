@@ -93,12 +93,12 @@ const (
 )
 
 const (
-	DecommsionEnter = 1
-	DecommsionWaitAddRes = 2
+	DecommsionEnter         = 1
+	DecommsionWaitAddRes    = 2
 	DecommsionWaitAddResFin = 3
-	DecommsionRemoveNew = 4
-	DecommsionRemoveOld = 5
-	DecommsionErr = 6
+	DecommsionRemoveNew     = 4
+	DecommsionRemoveOld     = 5
+	DecommsionErr           = 6
 )
 
 const (
