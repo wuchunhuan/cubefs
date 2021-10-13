@@ -34,8 +34,8 @@ const (
 	CliOpReset             = "reset"
 	CliOpReplicate         = "add-replica"
 	CliOpDelReplica        = "del-replica"
-	CliOpExpand              = "expand"
-	CliOpShrink              = "shrink"
+	CliOpExpand            = "expand"
+	CliOpShrink            = "shrink"
 
 	//Shorthand format of operation name
 	CliOpDecommissionShortHand = "dec"
@@ -82,7 +82,9 @@ const (
 	ResourceDataPartitionShortHand = "dp"
 	ResourceMetaPartitionShortHand = "mp"
 )
+
 type MasterOp int
+
 const (
 	OpExpandVol MasterOp = iota
 	OpShrinkVol
