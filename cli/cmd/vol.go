@@ -92,7 +92,7 @@ const (
 	cmdVolDefaultCapacity       = 10 // 100GB
 	cmdVolDefaultReplicas       = 3
 	cmdVolDefaultFollowerReader = true
-	cmdVolDefaultZoneName = "default"
+	cmdVolDefaultZoneName       = "default"
 )
 
 func newVolCreateCmd(client *master.MasterClient) *cobra.Command {
@@ -156,9 +156,11 @@ func newVolCreateCmd(client *master.MasterClient) *cobra.Command {
 	cmd.Flags().BoolVarP(&optYes, "yes", "y", false, "Answer yes for all questions")
 	return cmd
 }
+
 const (
-	cmdVolSetShort           = "Set configuration of the volume"
+	cmdVolSetShort = "Set configuration of the volume"
 )
+
 func newVolSetCmd(client *master.MasterClient) *cobra.Command {
 	var optCapacity uint64
 	var optReplicas int
@@ -190,7 +192,7 @@ func newVolSetCmd(client *master.MasterClient) *cobra.Command {
 			if optCapacity > 0 {
 				isChange = true
 				confirmString.WriteString(fmt.Sprintf("  Capacity            : %v GB -> %v GB\n", vv.Capacity, optCapacity))
-					vv.Capacity = optCapacity
+				vv.Capacity = optCapacity
 			} else {
 				confirmString.WriteString(fmt.Sprintf("  Capacity            : %v GB\n", vv.Capacity))
 			}
