@@ -163,7 +163,7 @@ func (mm *monitorMetrics) setVolMetrics() {
 		return true
 	})
 
-	for volName, _ := range deleteVolNames {
+	for volName := range deleteVolNames {
 		mm.deleteVolMetric(volName)
 	}
 }
