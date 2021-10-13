@@ -34,7 +34,7 @@ import (
 // Low-level API, i.e. work with inode
 
 const (
-	BatchIgetRespBuf = 1000
+	BatchIgetRespBuf   = 1000
 	UpdateSummaryRetry = 3
 )
 
@@ -44,10 +44,10 @@ const (
 )
 
 const (
-	SummaryKey = "DirStat"
+	SummaryKey             = "DirStat"
 	MaxSummaryGoroutineNum = 100
-	ChannelLen = 100
-	BatchSize = 200
+	ChannelLen             = 100
+	BatchSize              = 200
 )
 
 func (mw *MetaWrapper) GetRootIno(subdir string) (uint64, error) {
@@ -491,7 +491,7 @@ func (mw *MetaWrapper) Rename_ll(srcParentID uint64, srcName string, dstParentID
 			// evict oldInode to avoid oldInode becomes orphan inode
 			mw.ievict(inodeMP, oldInode)
 		}
-		if mw.EnableSummary{
+		if mw.EnableSummary {
 			sizeInc := srcInodeInfo.Size - dstInodeInfo.Size
 			go func() {
 				mw.UpdateSummary_ll(srcParentID, -1, 0, -int64(srcInodeInfo.Size))
@@ -584,7 +584,7 @@ func (mw *MetaWrapper) AppendExtentKey(parentInode, inode uint64, ek proto.Exten
 			newInfo, _ := mw.InodeGet_ll(inode)
 			if oldInfo != nil && newInfo != nil {
 				if int64(oldInfo.Size) < int64(newInfo.Size) {
-					mw.UpdateSummary_ll(parentInode, 0, 0, int64(newInfo.Size) - int64(oldInfo.Size))
+					mw.UpdateSummary_ll(parentInode, 0, 0, int64(newInfo.Size)-int64(oldInfo.Size))
 				}
 			}
 		}()
@@ -1058,7 +1058,7 @@ func (mw *MetaWrapper) GetSummary_ll(parentIno uint64, goroutineNum int32) (Summ
 		}()
 		go mw.getDirSummary(&summaryInfo, inodeCh, errCh)
 		for err := range errCh {
-			return SummaryInfo{0,0,0}, err
+			return SummaryInfo{0, 0, 0}, err
 		}
 		return summaryInfo, nil
 	} else {
@@ -1079,12 +1079,11 @@ func (mw *MetaWrapper) GetSummary_ll(parentIno uint64, goroutineNum int32) (Summ
 			close(errCh)
 		}(&summaryInfo)
 		for err := range errCh {
-			return SummaryInfo{0,0,0}, err
+			return SummaryInfo{0, 0, 0}, err
 		}
 		return summaryInfo, nil
 	}
 }
-
 
 func (mw *MetaWrapper) getDentry(parentIno uint64, inodeCh chan<- uint64, errCh chan<- error, wg *sync.WaitGroup, currentGoroutineNum *int32, newGoroutine bool, goroutineNum int32) {
 	defer func() {
@@ -1244,12 +1243,12 @@ func (mw *MetaWrapper) refreshSummary(parentIno uint64, errCh chan<- error, wg *
 		subdirs, _ := strconv.ParseInt(summaryList[1], 10, 64)
 		fbytes, _ := strconv.ParseInt(summaryList[2], 10, 64)
 		oldSummaryInfo = SummaryInfo{
-			Files: files,
+			Files:   files,
 			Subdirs: subdirs,
-			Fbytes: fbytes,
+			Fbytes:  fbytes,
 		}
 	} else {
-		oldSummaryInfo = SummaryInfo{0,0,0}
+		oldSummaryInfo = SummaryInfo{0, 0, 0}
 	}
 
 	newSummaryInfo := SummaryInfo{0, 0, 0}
@@ -1279,7 +1278,7 @@ func (mw *MetaWrapper) refreshSummary(parentIno uint64, errCh chan<- error, wg *
 		newSummaryInfo.Files-oldSummaryInfo.Files,
 		newSummaryInfo.Subdirs-oldSummaryInfo.Subdirs,
 		newSummaryInfo.Fbytes-oldSummaryInfo.Fbytes,
-		)
+	)
 
 	for _, subdirIno := range subdirsList {
 		if atomic.LoadInt32(currentGoroutineNum) < goroutineNum {

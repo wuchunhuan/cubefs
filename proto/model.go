@@ -160,20 +160,20 @@ type VolStatInfo struct {
 
 // DataPartition represents the structure of storing the file contents.
 type DataPartitionInfo struct {
-	PartitionID             uint64
-	LastLoadedTime          int64
-	ReplicaNum              uint8
-	Status                  int8
-	Replicas                []*DataReplica
-	Hosts                   []string // host addresses
-	Peers                   []Peer
-	Zones                   []string
-	MissingNodes            map[string]int64 // key: address of the missing node, value: when the node is missing
-	VolName                 string
-	VolID                   uint64
-	OfflinePeerID           uint64
-	FileInCoreMap           map[string]*FileInCore
-	FilesWithMissingReplica map[string]int64 // key: file name, value: last time when a missing replica is found
+	PartitionID              uint64
+	LastLoadedTime           int64
+	ReplicaNum               uint8
+	Status                   int8
+	Replicas                 []*DataReplica
+	Hosts                    []string // host addresses
+	Peers                    []Peer
+	Zones                    []string
+	MissingNodes             map[string]int64 // key: address of the missing node, value: when the node is missing
+	VolName                  string
+	VolID                    uint64
+	OfflinePeerID            uint64
+	FileInCoreMap            map[string]*FileInCore
+	FilesWithMissingReplica  map[string]int64 // key: file name, value: last time when a missing replica is found
 	SingleDecommissionStatus uint8
 	SingleDecommissionAddr   string
 }

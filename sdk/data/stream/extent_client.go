@@ -258,7 +258,7 @@ func (client *ExtentClient) Truncate(mw *meta.MetaWrapper, parentIno uint64, ino
 		log.LogError(errors.Stack(err))
 	}
 	if mw.EnableSummary {
-		go mw.UpdateSummary_ll(parentIno, 0, 0, int64(size) - int64(oldSize))
+		go mw.UpdateSummary_ll(parentIno, 0, 0, int64(size)-int64(oldSize))
 	}
 
 	return err
@@ -341,7 +341,7 @@ func (client *ExtentClient) Close() error {
 	var inodes []uint64
 	client.streamerLock.Lock()
 	inodes = make([]uint64, 0, len(client.streamers))
-	for inode, _ := range client.streamers {
+	for inode := range client.streamers {
 		inodes = append(inodes, inode)
 	}
 	client.streamerLock.Unlock()

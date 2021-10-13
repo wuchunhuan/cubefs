@@ -317,7 +317,7 @@ func (dp *DataPartition) prepareRepairTasks(repairTasks []*DataPartitionRepairTa
 			}
 		}
 	}
-	for extentID, _ := range deleteExtents {
+	for extentID := range deleteExtents {
 		extentInfo := extentInfoMap[extentID]
 		if extentInfo != nil {
 			extentInfo.IsDeleted = true
