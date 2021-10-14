@@ -59,7 +59,10 @@ struct cfs_dirent {
 import "C"
 
 import (
+	masterSDK "github.com/chubaofs/chubaofs/sdk/master"
+	"github.com/chubaofs/chubaofs/util/errors"
 	"io"
+	syslog "log"
 	"os"
 	gopath "path"
 	"reflect"
@@ -180,6 +183,9 @@ type client struct {
 	logDir        string
 	logLevel      string
 	enableSummary bool
+	secretKey     string
+	accessKey     string
+	subDir        string
 
 	// runtime context
 	cwd    string // current working directory
@@ -232,6 +238,10 @@ func cfs_set_client(id C.int64_t, key, val *C.char) C.int {
 		} else {
 			c.enableSummary = false
 		}
+	case "accessKey":
+		c.accessKey = v
+	case "secretKey":
+		c.secretKey = v
 	default:
 		return statusEINVAL
 	}
@@ -243,6 +253,12 @@ func cfs_start_client(id C.int64_t) C.int {
 	c, exist := getClient(int64(id))
 	if !exist {
 		return statusEINVAL
+	}
+
+	if err := c.checkPermission(); err != nil {
+		err = errors.NewErrorf("check permission failed: %v", err)
+		syslog.Println(err)
+		return statusEACCES
 	}
 
 	err := c.start()
@@ -932,6 +948,40 @@ func (c *client) start() (err error) {
 	c.mw = mw
 	c.ec = ec
 	return nil
+}
+
+func (c *client) checkPermission() (err error) {
+	// checkPermission
+	if c.accessKey == "" || c.secretKey == "" {
+		err = errors.New("invalid AccessKey or SecretKey")
+		return
+	}
+
+	var mc = masterSDK.NewMasterClientFromString(c.masterAddr, false)
+	var userInfo *proto.UserInfo
+	if userInfo, err = mc.UserAPI().GetAKInfo(c.accessKey); err != nil {
+		return
+	}
+	if userInfo.SecretKey != c.secretKey {
+		err = proto.ErrNoPermission
+		return
+	}
+	var policy = userInfo.Policy
+	if policy.IsOwn(c.volName) {
+		return
+	}
+	// read write
+	if policy.IsAuthorized(c.volName, c.subDir, proto.POSIXWriteAction) &&
+		policy.IsAuthorized(c.volName, c.subDir, proto.POSIXReadAction) {
+		return
+	}
+	// read only
+	if policy.IsAuthorized(c.volName, c.subDir, proto.POSIXReadAction) &&
+		!policy.IsAuthorized(c.volName, c.subDir, proto.POSIXWriteAction) {
+		return
+	}
+	err = proto.ErrNoPermission
+	return
 }
 
 func (c *client) allocFD(ino, pino uint64, flags, mode uint32) *file {
