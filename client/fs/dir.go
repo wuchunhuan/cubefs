@@ -18,6 +18,7 @@ import "C"
 import (
 	"github.com/chubaofs/chubaofs/sdk/meta"
 	"github.com/chubaofs/chubaofs/util/errors"
+	"github.com/chubaofs/chubaofs/util/stat"
 	"os"
 	"strconv"
 	"syscall"
@@ -69,6 +70,10 @@ func NewDir(s *Super, i *proto.InodeInfo) fs.Node {
 
 // Attr set the attributes of a directory.
 func (d *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Attr", err, bgTime, 1)
+
 	ino := d.info.Inode
 	info, err := d.super.InodeGet(ino)
 	if err != nil {
@@ -84,9 +89,11 @@ func (d *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
 func (d *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
 	start := time.Now()
 
+	bgTime := stat.BeginStat()
 	var err error
 	metric := exporter.NewTPCnt("filecreate")
 	defer func() {
+		stat.EndStat("Create", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
 	}()
 
@@ -118,8 +125,10 @@ func (d *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.Cr
 
 // Forget is called when the evict is invoked from the kernel.
 func (d *Dir) Forget() {
+	bgTime := stat.BeginStat()
 	ino := d.info.Inode
 	defer func() {
+		stat.EndStat("Forget", nil, bgTime, 1)
 		log.LogDebugf("TRACE Forget: ino(%v)", ino)
 	}()
 
@@ -134,9 +143,11 @@ func (d *Dir) Forget() {
 func (d *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, error) {
 	start := time.Now()
 
+	bgTime := stat.BeginStat()
 	var err error
 	metric := exporter.NewTPCnt("mkdir")
 	defer func() {
+		stat.EndStat("Mkdir", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
 	}()
 
@@ -165,9 +176,11 @@ func (d *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	start := time.Now()
 	d.dcache.Delete(req.Name)
 
+	bgTime := stat.BeginStat()
 	var err error
 	metric := exporter.NewTPCnt("remove")
 	defer func() {
+		stat.EndStat("Remove", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
 	}()
 
@@ -199,6 +212,9 @@ func (d *Dir) Lookup(ctx context.Context, req *fuse.LookupRequest, resp *fuse.Lo
 		ino uint64
 		err error
 	)
+
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Lookup", err, bgTime, 1)
 
 	log.LogDebugf("TRACE Lookup: parent(%v) req(%v)", d.info.Inode, req)
 
@@ -242,9 +258,11 @@ func (d *Dir) Lookup(ctx context.Context, req *fuse.LookupRequest, resp *fuse.Lo
 func (d *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	start := time.Now()
 
+	bgTime := stat.BeginStat()
 	var err error
 	metric := exporter.NewTPCnt("readdir")
 	defer func() {
+		stat.EndStat("ReadDirAll", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
 	}()
 
@@ -294,9 +312,11 @@ func (d *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Nod
 	start := time.Now()
 	d.dcache.Delete(req.OldName)
 
+	bgTime := stat.BeginStat()
 	var err error
 	metric := exporter.NewTPCnt("rename")
 	defer func() {
+		stat.EndStat("Rename", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
 	}()
 
@@ -316,6 +336,10 @@ func (d *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Nod
 
 // Setattr handles the setattr request.
 func (d *Dir) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse.SetattrResponse) error {
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Setattr", err, bgTime, 1)
+
 	ino := d.info.Inode
 	start := time.Now()
 	info, err := d.super.InodeGet(ino)
@@ -347,9 +371,11 @@ func (d *Dir) Mknod(ctx context.Context, req *fuse.MknodRequest) (fs.Node, error
 
 	start := time.Now()
 
+	bgTime := stat.BeginStat()
 	var err error
 	metric := exporter.NewTPCnt("mknod")
 	defer func() {
+		stat.EndStat("Mknod", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
 	}()
 
@@ -376,9 +402,11 @@ func (d *Dir) Symlink(ctx context.Context, req *fuse.SymlinkRequest) (fs.Node, e
 	parentIno := d.info.Inode
 	start := time.Now()
 
+	bgTime := stat.BeginStat()
 	var err error
 	metric := exporter.NewTPCnt("symlink")
 	defer func() {
+		stat.EndStat("Symlink", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
 	}()
 
@@ -417,9 +445,11 @@ func (d *Dir) Link(ctx context.Context, req *fuse.LinkRequest, old fs.Node) (fs.
 
 	start := time.Now()
 
+	bgTime := stat.BeginStat()
 	var err error
 	metric := exporter.NewTPCnt("link")
 	defer func() {
+		stat.EndStat("Link", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
 	}()
 
@@ -458,8 +488,10 @@ func (d *Dir) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fus
 	var info *proto.XAttrInfo
 	var err error
 
-	if name == meta.SummaryKey {
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Getxattr", err, bgTime, 1)
 
+	if name == meta.SummaryKey {
 		var summaryInfo meta.SummaryInfo
 		cacheSummaryInfo := d.super.sc.Get(ino)
 		if cacheSummaryInfo != nil {
@@ -506,6 +538,11 @@ func (d *Dir) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *f
 	if !d.super.enableXattr {
 		return fuse.ENOSYS
 	}
+
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Getxattr", err, bgTime, 1)
+
 	ino := d.info.Inode
 	_ = req.Size     // ignore currently
 	_ = req.Position // ignore currently
@@ -527,16 +564,22 @@ func (d *Dir) Setxattr(ctx context.Context, req *fuse.SetxattrRequest) error {
 	if !d.super.enableXattr {
 		return fuse.ENOSYS
 	}
+
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Setxattr", err, bgTime, 1)
+
 	ino := d.info.Inode
 	name := req.Name
 	value := req.Xattr
+
 	if name == meta.SummaryKey {
-		err := errors.New("Set 'DirStat' is not supported.")
+		err = errors.New("Set 'DirStat' is not supported.")
 		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
 		return nil
 	}
 	// TODO： implement flag to improve compatible (Mofei Zhang)
-	if err := d.super.mw.XAttrSet_ll(ino, []byte(name), []byte(value)); err != nil {
+	if err = d.super.mw.XAttrSet_ll(ino, []byte(name), []byte(value)); err != nil {
 		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
 		return ParseError(err)
 	}
@@ -549,14 +592,20 @@ func (d *Dir) Removexattr(ctx context.Context, req *fuse.RemovexattrRequest) err
 	if !d.super.enableXattr {
 		return fuse.ENOSYS
 	}
+
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Removexattr", err, bgTime, 1)
+
 	ino := d.info.Inode
 	name := req.Name
+
 	if name == meta.SummaryKey {
-		err := errors.New("Remove 'DirStat' is not supported.")
+		err = errors.New("Remove 'DirStat' is not supported.")
 		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
 		return nil
 	}
-	if err := d.super.mw.XAttrDel_ll(ino, name); err != nil {
+	if err = d.super.mw.XAttrDel_ll(ino, name); err != nil {
 		log.LogErrorf("Removexattr: ino(%v) name(%v) err(%v)", ino, name, err)
 		return ParseError(err)
 	}

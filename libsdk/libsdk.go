@@ -61,6 +61,7 @@ import "C"
 import (
 	masterSDK "github.com/chubaofs/chubaofs/sdk/master"
 	"github.com/chubaofs/chubaofs/util/errors"
+	"github.com/chubaofs/chubaofs/util/stat"
 	"io"
 	syslog "log"
 	"os"
@@ -920,7 +921,16 @@ func (c *client) start() (err error) {
 	var masters = strings.Split(c.masterAddr, ",")
 
 	if c.logDir != "" {
-		log.InitLog(c.logDir, "libcfs", log.InfoLevel, nil)
+		if c.logLevel == "" {
+			c.logLevel = "WARN"
+		}
+		level := parseLogLevel(c.logLevel)
+		log.InitLog(c.logDir, "libcfs", level, nil)
+		stat.NewStatistic(c.logDir, int64(stat.DefaultStatLogSize), stat.DefaultTimeOutUs, true)
+	}
+
+	if c.enableSummary {
+		c.sc = fs.NewSummaryCache(fs.DefaultSummaryExpiration, fs.MaxSummaryCache)
 	}
 
 	var mw *meta.MetaWrapper
@@ -1098,6 +1108,24 @@ func (c *client) read(f *file, offset int, data []byte) (n int, err error) {
 	}
 	return n, nil
 }
+
+func parseLogLevel(loglvl string) log.Level {
+	var level log.Level
+	switch strings.ToLower(loglvl) {
+	case "debug":
+		level = log.DebugLevel
+	case "info":
+		level = log.InfoLevel
+	case "warn":
+		level = log.WarnLevel
+	case "error":
+		level = log.ErrorLevel
+	default:
+		level = log.ErrorLevel
+	}
+	return level
+}
+
 
 func (c *client) fileSize(ino uint64) (size int, gen uint64) {
 	size, gen, valid := c.ec.FileSize(ino)

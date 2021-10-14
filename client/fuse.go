@@ -48,6 +48,7 @@ import (
 	"github.com/chubaofs/chubaofs/util/errors"
 	"github.com/chubaofs/chubaofs/util/exporter"
 	"github.com/chubaofs/chubaofs/util/log"
+	"github.com/chubaofs/chubaofs/util/stat"
 	"github.com/chubaofs/chubaofs/util/ump"
 	"github.com/jacobsa/daemonize"
 )
@@ -130,6 +131,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer log.LogFlush()
+
+	_, err = stat.NewStatistic(opt.Logpath, int64(stat.DefaultStatLogSize),
+		stat.DefaultTimeOutUs, true)
+	if err != nil {
+		err = errors.NewErrorf("Init stat log fail: %v\n", err)
+		fmt.Println(err)
+		daemonize.SignalOutcome(err)
+		os.Exit(1)
+	}
+	stat.ClearStat()
 
 	outputFilePath := path.Join(opt.Logpath, LoggerPrefix, LoggerOutput)
 	outputFile, err := os.OpenFile(outputFilePath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
