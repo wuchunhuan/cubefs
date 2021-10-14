@@ -17,7 +17,6 @@ package fs
 import "C"
 import (
 	"github.com/chubaofs/chubaofs/sdk/meta"
-	"github.com/chubaofs/chubaofs/util/errors"
 	"github.com/chubaofs/chubaofs/util/stat"
 	"os"
 	"strconv"
@@ -492,6 +491,9 @@ func (d *Dir) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fus
 	defer stat.EndStat("Getxattr", err, bgTime, 1)
 
 	if name == meta.SummaryKey {
+		if !d.super.mw.EnableSummary {
+			return fuse.ENOSYS
+		}
 		var summaryInfo meta.SummaryInfo
 		cacheSummaryInfo := d.super.sc.Get(ino)
 		if cacheSummaryInfo != nil {
@@ -574,9 +576,8 @@ func (d *Dir) Setxattr(ctx context.Context, req *fuse.SetxattrRequest) error {
 	value := req.Xattr
 
 	if name == meta.SummaryKey {
-		err = errors.New("Set 'DirStat' is not supported.")
-		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
-		return nil
+		log.LogErrorf("Set 'DirStat' is not supported.")
+		return fuse.ENOSYS
 	}
 	// TODO： implement flag to improve compatible (Mofei Zhang)
 	if err = d.super.mw.XAttrSet_ll(ino, []byte(name), []byte(value)); err != nil {
@@ -601,9 +602,8 @@ func (d *Dir) Removexattr(ctx context.Context, req *fuse.RemovexattrRequest) err
 	name := req.Name
 
 	if name == meta.SummaryKey {
-		err = errors.New("Remove 'DirStat' is not supported.")
-		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
-		return nil
+		log.LogErrorf("Remove 'DirStat' is not supported.")
+		return fuse.ENOSYS
 	}
 	if err = d.super.mw.XAttrDel_ll(ino, name); err != nil {
 		log.LogErrorf("Removexattr: ino(%v) name(%v) err(%v)", ino, name, err)

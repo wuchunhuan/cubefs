@@ -1126,7 +1126,6 @@ func parseLogLevel(loglvl string) log.Level {
 	return level
 }
 
-
 func (c *client) fileSize(ino uint64) (size int, gen uint64) {
 	size, gen, valid := c.ec.FileSize(ino)
 	log.LogDebugf("fileSize: ino(%v) fileSize(%v) gen(%v) valid(%v)", ino, size, gen, valid)

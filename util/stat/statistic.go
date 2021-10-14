@@ -25,9 +25,9 @@ const (
 
 	F_OK                = 0
 	MaxTimeoutLevel     = 3
-	DefaultStatInterval = 60  					// 60 seconds
-	DefaultStatLogSize  = 200 * 1024 * 1024  	// 200M
-	DefaultHeadRoom 	= 2 * 1024  			// 2G
+	DefaultStatInterval = 60                // 60 seconds
+	DefaultStatLogSize  = 200 * 1024 * 1024 // 200M
+	DefaultHeadRoom     = 2 * 1024          // 2G
 	MaxReservedDays     = 7 * 24 * time.Hour
 )
 
@@ -61,7 +61,7 @@ type Statistic struct {
 	logDir        string
 	logMaxSize    int64
 	logBaseName   string
-	pid 		  int
+	pid           int
 	lastClearTime time.Time
 	timeOutUs     [MaxTimeoutLevel]uint32
 	typeInfoMap   map[string]*typeInfo
@@ -88,7 +88,7 @@ func NewStatistic(dir string, logMaxSize int64, timeOutUs [MaxTimeoutLevel]uint3
 		logDir:        dir,
 		logMaxSize:    logMaxSize,
 		logBaseName:   logName,
-		pid:		   os.Getpid(),
+		pid:           os.Getpid(),
 		lastClearTime: time.Time{},
 		timeOutUs:     [MaxTimeoutLevel]uint32{},
 		typeInfoMap:   make(map[string]*typeInfo),
@@ -133,7 +133,7 @@ func (st *Statistic) flushScheduler() {
 	}
 }
 
-func removeLogFile(diskSpaceLeft int64)  {
+func removeLogFile(diskSpaceLeft int64) {
 	fInfos, err := ioutil.ReadDir(gSt.logDir)
 	if err != nil {
 		log.LogErrorf("ReadDir failed, logDir: %s, err: %v", gSt.logDir, err)
@@ -221,7 +221,7 @@ func WriteStat() error {
 		log.LogErrorf("Get process memory failed, err: %v", err)
 		fmt.Fprintf(ioStream, "Get Mem Failed.\n")
 	} else {
-		fmt.Fprintf(ioStream, "Mem Used: %10d \n", mem / 1024)
+		fmt.Fprintf(ioStream, "Mem Used: %10d \n", mem/1024)
 	}
 
 	fmt.Fprintf(ioStream, "%-35s|%8s|%8s|%10s|%10s|%10s|%11s|%11s|%11s|\n",
@@ -249,7 +249,7 @@ func WriteStat() error {
 			typeInfo.timeOut[0], typeInfo.timeOut[1], typeInfo.timeOut[2])
 	}
 
-	fmt.Fprintf(ioStream, "-------------------------------------------------------------------" +
+	fmt.Fprintf(ioStream, "-------------------------------------------------------------------"+
 		"--------------------------------------------------------\n")
 
 	// clear stat
@@ -361,4 +361,3 @@ func shiftFiles() error {
 func StatBandWidth(typeName string, Size uint32) {
 	EndStat(typeName+"[FLOW_KB]", nil, nil, Size/1024)
 }
-
