@@ -166,6 +166,10 @@ func deleteFileFilter(info os.FileInfo, diskSpaceLeft int64) bool {
 }
 
 func CloseStat() {
+	if gSt == nil {
+		return
+	}
+
 	gSt.closeStat = true
 }
 
@@ -175,6 +179,10 @@ func BeginStat() (bgTime *time.Time) {
 }
 
 func EndStat(typeName string, err error, bgTime *time.Time, statCount uint32) error {
+	if gSt == nil {
+		return nil
+	}
+
 	if gSt.closeStat {
 		return nil
 	}
@@ -197,6 +205,10 @@ func EndStat(typeName string, err error, bgTime *time.Time, statCount uint32) er
 }
 
 func WriteStat() error {
+	if gSt == nil {
+		return nil
+	}
+
 	if gSt.useMutex {
 		gSt.Lock()
 		defer gSt.Unlock()
@@ -262,6 +274,10 @@ func WriteStat() error {
 }
 
 func ClearStat() {
+	if gSt == nil {
+		return
+	}
+
 	if gSt.useMutex {
 		gSt.Lock()
 		defer gSt.Unlock()
@@ -272,6 +288,10 @@ func ClearStat() {
 }
 
 func AddStat(typeName string, err error, bgTime *time.Time, statCount uint32) error {
+	if gSt == nil {
+		return nil
+	}
+
 	if len(typeName) == 0 {
 		return fmt.Errorf("AddStat fail, typeName %s\n", typeName)
 	}
