@@ -16,6 +16,7 @@ package fs
 
 import (
 	"fmt"
+	"github.com/chubaofs/chubaofs/util/stat"
 	"io"
 	"time"
 
@@ -64,6 +65,10 @@ func NewFile(s *Super, i *proto.InodeInfo, parentIno uint64) fs.Node {
 
 // Attr sets the attributes of a file.
 func (f *File) Attr(ctx context.Context, a *fuse.Attr) error {
+	var err error
+	bgTime := stat.BeginStat()
+	stat.EndStat("Attr", err, bgTime, 1)
+
 	ino := f.info.Inode
 	info, err := f.super.InodeGet(ino)
 	if err != nil {
@@ -91,8 +96,12 @@ func (f *File) Attr(ctx context.Context, a *fuse.Attr) error {
 
 // Forget evicts the inode of the current file. This can only happen when the inode is on the orphan list.
 func (f *File) Forget() {
+	var err error
+	bgTime := stat.BeginStat()
+
 	ino := f.info.Inode
 	defer func() {
+		stat.EndStat("Forget", err, bgTime, 1)
 		log.LogDebugf("TRACE Forget: ino(%v)", ino)
 	}()
 
@@ -118,6 +127,9 @@ func (f *File) Forget() {
 
 // Open handles the open request.
 func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (handle fs.Handle, err error) {
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Open", err, bgTime, 1)
+
 	ino := f.info.Inode
 	start := time.Now()
 
@@ -136,6 +148,9 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 
 // Release handles the release request.
 func (f *File) Release(ctx context.Context, req *fuse.ReleaseRequest) (err error) {
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Release", err, bgTime, 1)
+
 	ino := f.info.Inode
 	log.LogDebugf("TRACE Release enter: ino(%v) req(%v)", ino, req)
 
@@ -157,6 +172,9 @@ func (f *File) Release(ctx context.Context, req *fuse.ReleaseRequest) (err error
 
 // Read handles the read request.
 func (f *File) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) (err error) {
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Read", err, bgTime, 1)
+
 	log.LogDebugf("TRACE Read enter: ino(%v) offset(%v) reqsize(%v) req(%v)", f.info.Inode, req.Offset, req.Size, req)
 
 	start := time.Now()
@@ -193,6 +211,9 @@ func (f *File) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadR
 
 // Write handles the write request.
 func (f *File) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.WriteResponse) (err error) {
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Write", err, bgTime, 1)
+
 	ino := f.info.Inode
 	reqlen := len(req.Data)
 	filesize, _ := f.fileSize(ino)
@@ -264,6 +285,9 @@ func (f *File) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.Wri
 
 // Flush only when fsyncOnClose is enabled.
 func (f *File) Flush(ctx context.Context, req *fuse.FlushRequest) (err error) {
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Flush", err, bgTime, 1)
+
 	if !f.super.fsyncOnClose {
 		return fuse.ENOSYS
 	}
@@ -289,6 +313,9 @@ func (f *File) Flush(ctx context.Context, req *fuse.FlushRequest) (err error) {
 
 // Fsync hanldes the fsync request.
 func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) (err error) {
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Fsync", err, bgTime, 1)
+
 	log.LogDebugf("TRACE Fsync enter: ino(%v)", f.info.Inode)
 	start := time.Now()
 	err = f.super.ec.Flush(f.info.Inode)
@@ -305,6 +332,10 @@ func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) (err error) {
 
 // Setattr handles the setattr request.
 func (f *File) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse.SetattrResponse) error {
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Setattr", err, bgTime, 1)
+
 	ino := f.info.Inode
 	start := time.Now()
 	if req.Valid.Size() {
@@ -350,6 +381,10 @@ func (f *File) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse
 
 // Readlink handles the readlink request.
 func (f *File) Readlink(ctx context.Context, req *fuse.ReadlinkRequest) (string, error) {
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Readlink", err, bgTime, 1)
+
 	ino := f.info.Inode
 	info, err := f.super.InodeGet(ino)
 	if err != nil {
@@ -362,6 +397,10 @@ func (f *File) Readlink(ctx context.Context, req *fuse.ReadlinkRequest) (string,
 
 // Getxattr has not been implemented yet.
 func (f *File) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Getxattr", err, bgTime, 1)
+
 	if !f.super.enableXattr {
 		return fuse.ENOSYS
 	}
@@ -388,6 +427,10 @@ func (f *File) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fu
 
 // Listxattr has not been implemented yet.
 func (f *File) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *fuse.ListxattrResponse) error {
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Listxattr", err, bgTime, 1)
+
 	if !f.super.enableXattr {
 		return fuse.ENOSYS
 	}
@@ -409,6 +452,10 @@ func (f *File) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *
 
 // Setxattr has not been implemented yet.
 func (f *File) Setxattr(ctx context.Context, req *fuse.SetxattrRequest) error {
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Setxattr", err, bgTime, 1)
+
 	if !f.super.enableXattr {
 		return fuse.ENOSYS
 	}
@@ -416,7 +463,7 @@ func (f *File) Setxattr(ctx context.Context, req *fuse.SetxattrRequest) error {
 	name := req.Name
 	value := req.Xattr
 	// TODO： implement flag to improve compatible (Mofei Zhang)
-	if err := f.super.mw.XAttrSet_ll(ino, []byte(name), []byte(value)); err != nil {
+	if err = f.super.mw.XAttrSet_ll(ino, []byte(name), []byte(value)); err != nil {
 		log.LogErrorf("Setxattr: ino(%v) name(%v) err(%v)", ino, name, err)
 		return ParseError(err)
 	}
@@ -426,12 +473,16 @@ func (f *File) Setxattr(ctx context.Context, req *fuse.SetxattrRequest) error {
 
 // Removexattr has not been implemented yet.
 func (f *File) Removexattr(ctx context.Context, req *fuse.RemovexattrRequest) error {
+	var err error
+	bgTime := stat.BeginStat()
+	defer stat.EndStat("Removexattr", err, bgTime, 1)
+
 	if !f.super.enableXattr {
 		return fuse.ENOSYS
 	}
 	ino := f.info.Inode
 	name := req.Name
-	if err := f.super.mw.XAttrDel_ll(ino, name); err != nil {
+	if err = f.super.mw.XAttrDel_ll(ino, name); err != nil {
 		log.LogErrorf("Removexattr: ino(%v) name(%v) err(%v)", ino, name, err)
 		return ParseError(err)
 	}
