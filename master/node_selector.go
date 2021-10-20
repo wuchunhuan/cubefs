@@ -16,10 +16,11 @@ package master
 
 import (
 	"fmt"
-	"github.com/chubaofs/chubaofs/proto"
-	"github.com/chubaofs/chubaofs/util/log"
 	"sort"
 	"sync"
+
+	"github.com/chubaofs/chubaofs/proto"
+	"github.com/chubaofs/chubaofs/util/log"
 )
 
 const (
@@ -118,18 +119,20 @@ func getAllCarryMetaNodes(maxTotal uint64, excludeHosts []string, metaNodes *syn
 	log.LogInfof("getAllCarryMetaNodes")
 	nodes = make(SortedWeightedNodes, 0)
 	metaNodes.Range(func(key, value interface{}) bool {
-		log.LogInfof("getAllCarryMetaNodes [%v] ", key)
+		log.LogInfof("[getAllCarryMetaNodes] getAllCarryMetaNodes [%v] ", key)
 		metaNode := value.(*MetaNode)
-		if contains(excludeHosts, metaNode.Addr) == true {
-			log.LogInfof("metaNode [%v] is excludeHosts", metaNode.Addr)
+		if contains(excludeHosts, metaNode.Addr) {
+			log.LogInfof("[getAllCarryMetaNodes] metaNode [%v] is excludeHosts", metaNode.Addr)
 			return true
 		}
-		if metaNode.isWritable() == false {
-			log.LogInfof("metaNode [%v] is not writeable", metaNode.Addr)
+
+		if !metaNode.isWritable() {
+			log.LogInfof("[getAllCarryMetaNodes] metaNode [%v] is not writeable", metaNode.Addr)
 			return true
 		}
-		if metaNode.isCarryNode() == true {
-			log.LogInfof("metaNode [%v] is CarryNode", metaNode.Addr)
+
+		if metaNode.isCarryNode() {
+			log.LogInfof("[getAllCarryMetaNodes] metaNode [%v] is CarryNode", metaNode.Addr)
 			availCount++
 		}
 		nt := new(weightedNode)
@@ -152,17 +155,19 @@ func getAvailCarryDataNodeTab(maxTotal uint64, excludeHosts []string, dataNodes 
 	nodeTabs = make(SortedWeightedNodes, 0)
 	dataNodes.Range(func(key, value interface{}) bool {
 		dataNode := value.(*DataNode)
-		if contains(excludeHosts, dataNode.Addr) == true {
-			log.LogInfof("metaNode [%v] is excludeHosts", dataNode.Addr)
+		if contains(excludeHosts, dataNode.Addr) {
+			log.LogInfof("[getAvailCarryDataNodeTab] dataNode [%v] is excludeHosts", dataNode.Addr)
 			log.LogDebugf("contains return")
 			return true
 		}
-		if dataNode.isWriteAble() == false {
-			log.LogInfof("dataNode [%v] is not writeable", dataNode.Addr)
+
+		if !dataNode.isWriteAble() {
+			log.LogInfof("[getAvailCarryDataNodeTab] dataNode [%v] is not writeable", dataNode.Addr)
 			log.LogDebugf("isWritable return")
 			return true
 		}
-		if dataNode.isAvailCarryNode() == true {
+
+		if dataNode.isAvailCarryNode() {
 			availCount++
 		}
 		nt := new(weightedNode)
