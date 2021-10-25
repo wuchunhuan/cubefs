@@ -2,9 +2,10 @@ package master
 
 import (
 	"fmt"
-	"github.com/chubaofs/chubaofs/proto"
 	"testing"
 	"time"
+
+	"github.com/chubaofs/chubaofs/proto"
 )
 
 func buildPanicCluster() *Cluster {
@@ -21,7 +22,7 @@ func buildPanicVol() *Vol {
 	}
 	var createTime = time.Now().Unix() // record create time of this volume
 	vol := newVol(id, commonVol.Name, commonVol.Owner, "", commonVol.dataPartitionSize, commonVol.Capacity,
-		defaultReplicaNum, defaultReplicaNum, false, false, false, createTime, "")
+		defaultReplicaNum, defaultReplicaNum, false, false, false, false, createTime, "")
 	vol.dataPartitions = nil
 	return vol
 }

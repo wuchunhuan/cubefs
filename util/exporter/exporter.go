@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -149,10 +150,15 @@ func RegistConsul(cluster string, role string, cfg *config.Config) {
 		log.LogErrorf("get local ip error, %v", err.Error())
 		return
 	}
+	rawmnt := cfg.GetString("subdir")
+	if rawmnt == "" {
+		rawmnt = "/"
+	}
+	mountPoint, _ := filepath.Abs(rawmnt)
 
 	if enablePush {
 		log.LogWarnf("[RegisterConsul] use auto push data strategy, not register consul")
-		autoPush(pushAddr, role, cluster, host)
+		autoPush(pushAddr, role, cluster, host, mountPoint)
 		return
 	}
 
@@ -182,7 +188,7 @@ func RegistConsul(cluster string, role string, cfg *config.Config) {
 	}
 }
 
-func autoPush(pushAddr, role, cluster, ip string) {
+func autoPush(pushAddr, role, cluster, ip, mountPoint string) {
 
 	pid := os.Getpid()
 
@@ -200,9 +206,10 @@ func autoPush(pushAddr, role, cluster, ip string) {
 		Grouping("commit", proto.CommitID).
 		Grouping("dataset", "custom").
 		Grouping("category", "custom").
-		Grouping("app", AppName)
+		Grouping("app", AppName).
+		Grouping("mountPoint", mountPoint)
 
-	log.LogInfof("start push data, ip %s, addr %s, role %s, cluster %s", ip, pushAddr, role, cluster)
+	log.LogInfof("start push data, ip %s, addr %s, role %s, cluster %s, mountPoint %s", ip, pushAddr, role, cluster, mountPoint)
 
 	ticker := time.NewTicker(time.Second * 15)
 	go func() {
