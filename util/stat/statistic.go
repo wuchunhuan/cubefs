@@ -233,7 +233,7 @@ func WriteStat() error {
 		log.LogErrorf("Get process memory failed, err: %v", err)
 		fmt.Fprintf(ioStream, "Get Mem Failed.\n")
 	} else {
-		fmt.Fprintf(ioStream, "Mem Used: %10d \n", mem/1024)
+		fmt.Fprintf(ioStream, "Mem Used: %10d kB\n", mem/1024)
 	}
 
 	fmt.Fprintf(ioStream, "%-35s|%8s|%8s|%10s|%10s|%10s|%11s|%11s|%11s|\n",
