@@ -209,7 +209,7 @@ func autoPush(pushAddr, role, cluster, ip, mountPoint string) {
 		Grouping("app", AppName).
 		Grouping("mountPoint", mountPoint)
 
-		log.LogInfof("start push data, ip %s, addr %s, role %s, cluster %s, mountPoint %s", ip, pushAddr, role, cluster, mountPoint)
+	log.LogInfof("start push data, ip %s, addr %s, role %s, cluster %s, mountPoint %s", ip, pushAddr, role, cluster, mountPoint)
 
 	ticker := time.NewTicker(time.Second * 15)
 	go func() {
