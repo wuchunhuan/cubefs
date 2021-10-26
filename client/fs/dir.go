@@ -71,7 +71,9 @@ func NewDir(s *Super, i *proto.InodeInfo) fs.Node {
 func (d *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
 	var err error
 	bgTime := stat.BeginStat()
-	defer stat.EndStat("Attr", err, bgTime, 1)
+	defer func() {
+		stat.EndStat("Attr", err, bgTime, 1)
+	}()
 
 	ino := d.info.Inode
 	info, err := d.super.InodeGet(ino)
@@ -213,7 +215,9 @@ func (d *Dir) Lookup(ctx context.Context, req *fuse.LookupRequest, resp *fuse.Lo
 	)
 
 	bgTime := stat.BeginStat()
-	defer stat.EndStat("Lookup", err, bgTime, 1)
+	defer func() {
+		stat.EndStat("Lookup", err, bgTime, 1)
+	}()
 
 	log.LogDebugf("TRACE Lookup: parent(%v) req(%v)", d.info.Inode, req)
 
@@ -337,7 +341,9 @@ func (d *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Nod
 func (d *Dir) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse.SetattrResponse) error {
 	var err error
 	bgTime := stat.BeginStat()
-	defer stat.EndStat("Setattr", err, bgTime, 1)
+	defer func() {
+		stat.EndStat("Setattr", err, bgTime, 1)
+	}()
 
 	ino := d.info.Inode
 	start := time.Now()
@@ -488,7 +494,9 @@ func (d *Dir) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fus
 	var err error
 
 	bgTime := stat.BeginStat()
-	defer stat.EndStat("Getxattr", err, bgTime, 1)
+	defer func() {
+		stat.EndStat("Getxattr", err, bgTime, 1)
+	}()
 
 	if name == meta.SummaryKey {
 		if !d.super.mw.EnableSummary {
@@ -543,7 +551,9 @@ func (d *Dir) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *f
 
 	var err error
 	bgTime := stat.BeginStat()
-	defer stat.EndStat("Getxattr", err, bgTime, 1)
+	defer func() {
+		stat.EndStat("Getxattr", err, bgTime, 1)
+	}()
 
 	ino := d.info.Inode
 	_ = req.Size     // ignore currently
@@ -569,7 +579,9 @@ func (d *Dir) Setxattr(ctx context.Context, req *fuse.SetxattrRequest) error {
 
 	var err error
 	bgTime := stat.BeginStat()
-	defer stat.EndStat("Setxattr", err, bgTime, 1)
+	defer func() {
+		stat.EndStat("Setxattr", err, bgTime, 1)
+	}()
 
 	ino := d.info.Inode
 	name := req.Name
@@ -596,7 +608,9 @@ func (d *Dir) Removexattr(ctx context.Context, req *fuse.RemovexattrRequest) err
 
 	var err error
 	bgTime := stat.BeginStat()
-	defer stat.EndStat("Removexattr", err, bgTime, 1)
+	defer func() {
+		stat.EndStat("Removexattr", err, bgTime, 1)
+	}()
 
 	ino := d.info.Inode
 	name := req.Name

@@ -16,6 +16,7 @@ package stream
 
 import (
 	"fmt"
+	"github.com/chubaofs/chubaofs/util/stat"
 	"golang.org/x/net/context"
 	"io"
 	"sync"
@@ -97,6 +98,10 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 		requests        []*ExtentRequest
 		revisedRequests []*ExtentRequest
 	)
+	bgTime := stat.BeginStat()
+	defer func() {
+		stat.EndStat("streamer-read", err, bgTime, 1)
+	}()
 
 	ctx := context.Background()
 	s.client.readLimiter.Wait(ctx)
