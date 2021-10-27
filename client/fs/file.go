@@ -179,6 +179,7 @@ func (f *File) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadR
 	bgTime := stat.BeginStat()
 	defer func() {
 		stat.EndStat("Read", err, bgTime, 1)
+		stat.StatBandWidth("Read", uint32(req.Size))
 	}()
 
 	log.LogDebugf("TRACE Read enter: ino(%v) offset(%v) reqsize(%v) req(%v)", f.info.Inode, req.Offset, req.Size, req)
@@ -220,6 +221,7 @@ func (f *File) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.Wri
 	bgTime := stat.BeginStat()
 	defer func() {
 		stat.EndStat("Write", err, bgTime, 1)
+		stat.StatBandWidth("Write", uint32(len(req.Data)))
 	}()
 
 	ino := f.info.Inode

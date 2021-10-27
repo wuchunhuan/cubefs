@@ -16,7 +16,6 @@ package stream
 
 import (
 	"fmt"
-	"github.com/chubaofs/chubaofs/util/stat"
 	"golang.org/x/net/context"
 	"hash/crc32"
 	"net"
@@ -261,10 +260,6 @@ func (s *Streamer) handleRequest(request interface{}) {
 }
 
 func (s *Streamer) write(data []byte, offset, size, flags int) (total int, err error) {
-	bgTime := stat.BeginStat()
-	defer func() {
-		stat.EndStat("streamer-write", err, bgTime, 1)
-	}()
 
 	var direct bool
 
@@ -444,10 +439,6 @@ func (s *Streamer) doWrite(data []byte, offset, size int, direct bool) (total in
 }
 
 func (s *Streamer) flush() (err error) {
-	bgTime := stat.BeginStat()
-	defer func() {
-		stat.EndStat("streamer-flush", err, bgTime, 1)
-	}()
 
 	for {
 		element := s.dirtylist.Get()
