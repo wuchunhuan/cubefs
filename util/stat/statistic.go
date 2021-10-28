@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	Stat_Module        = "client_stat"
+	Stat_Module        = "mem_stat"
 	FileNameDateFormat = "20060102150405"
 	ShiftedExtension   = ".old"
 	PRO_MEM            = "/proc/%d/status"
@@ -28,7 +28,7 @@ const (
 	MaxTimeoutLevel     = 3
 	DefaultStatInterval = 60                // 60 seconds
 	DefaultStatLogSize  = 200 * 1024 * 1024 // 200M
-	DefaultHeadRoom     = 2 * 1024          // 2G
+	DefaultHeadRoom     = 10 * 1024         // 10G
 	MaxReservedDays     = 7 * 24 * time.Hour
 )
 
@@ -73,8 +73,8 @@ type Statistic struct {
 
 var gSt *Statistic = nil
 
-func NewStatistic(dir string, logMaxSize int64, timeOutUs [MaxTimeoutLevel]uint32, useMutex bool) (*Statistic, error) {
-	dir = path.Join(dir, Stat_Module)
+func NewStatistic(dir, logModule string, logMaxSize int64, timeOutUs [MaxTimeoutLevel]uint32, useMutex bool) (*Statistic, error) {
+	dir = path.Join(dir, logModule)
 	fi, err := os.Stat(dir)
 	if err != nil {
 		os.MkdirAll(dir, 0755)
@@ -126,15 +126,11 @@ func (st *Statistic) flushScheduler() {
 		}
 		diskSpaceLeft := int64(fs.Bavail * uint64(fs.Bsize))
 		diskSpaceLeft -= DefaultHeadRoom * 1024 * 1024
-		if diskSpaceLeft <= 0 {
-			go removeLogFile(diskSpaceLeft)
-		} else {
-			continue
-		}
+		removeLogFile(diskSpaceLeft, Stat_Module)
 	}
 }
 
-func removeLogFile(diskSpaceLeft int64) {
+func removeLogFile(diskSpaceLeft int64, module string) {
 	fInfos, err := ioutil.ReadDir(gSt.logDir)
 	if err != nil {
 		log.LogErrorf("ReadDir failed, logDir: %s, err: %v", gSt.logDir, err)
@@ -142,7 +138,7 @@ func removeLogFile(diskSpaceLeft int64) {
 	}
 	var needDelFiles ShiftedFile
 	for _, info := range fInfos {
-		if deleteFileFilter(info, diskSpaceLeft) {
+		if deleteFileFilter(info, diskSpaceLeft, module) {
 			needDelFiles = append(needDelFiles, info)
 		}
 	}
@@ -159,11 +155,11 @@ func removeLogFile(diskSpaceLeft int64) {
 	}
 }
 
-func deleteFileFilter(info os.FileInfo, diskSpaceLeft int64) bool {
+func deleteFileFilter(info os.FileInfo, diskSpaceLeft int64, module string) bool {
 	if diskSpaceLeft <= 0 {
-		return info.Mode().IsRegular() && strings.HasSuffix(info.Name(), ShiftedExtension)
+		return info.Mode().IsRegular() && strings.HasSuffix(info.Name(), ShiftedExtension) && strings.HasPrefix(info.Name(), module)
 	}
-	return time.Since(info.ModTime()) > MaxReservedDays && strings.HasSuffix(info.Name(), ShiftedExtension)
+	return time.Since(info.ModTime()) > MaxReservedDays && strings.HasSuffix(info.Name(), ShiftedExtension) && strings.HasPrefix(info.Name(), module)
 }
 
 func CloseStat() {

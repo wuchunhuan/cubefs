@@ -928,7 +928,7 @@ func (c *client) start() (err error) {
 		}
 		level := parseLogLevel(c.logLevel)
 		log.InitLog(c.logDir, "libcfs", level, nil)
-		stat.NewStatistic(c.logDir, int64(stat.DefaultStatLogSize), stat.DefaultTimeOutUs, true)
+		stat.NewStatistic(c.logDir, "libcfs", int64(stat.DefaultStatLogSize), stat.DefaultTimeOutUs, true)
 	}
 
 	if c.enableSummary {
