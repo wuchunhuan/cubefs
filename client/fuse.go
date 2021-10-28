@@ -132,7 +132,7 @@ func main() {
 	}
 	defer log.LogFlush()
 
-	_, err = stat.NewStatistic(opt.Logpath, int64(stat.DefaultStatLogSize),
+	_, err = stat.NewStatistic(opt.Logpath, LoggerPrefix, int64(stat.DefaultStatLogSize),
 		stat.DefaultTimeOutUs, true)
 	if err != nil {
 		err = errors.NewErrorf("Init stat log fail: %v\n", err)

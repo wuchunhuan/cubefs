@@ -16,6 +16,7 @@ package stream
 
 import (
 	"fmt"
+	"github.com/chubaofs/chubaofs/util/stat"
 	"net"
 	"sync/atomic"
 	"time"
@@ -545,6 +546,11 @@ func (eh *ExtentHandler) createConnection(dp *wrapper.DataPartition) (*net.TCPCo
 }
 
 func (eh *ExtentHandler) createExtent(dp *wrapper.DataPartition) (extID int, err error) {
+	bgTime := stat.BeginStat()
+	defer func() {
+		stat.EndStat("createExtent", err, bgTime, 1)
+	}()
+
 	conn, err := StreamConnPool.GetConnect(dp.Hosts[0])
 	if err != nil {
 		errors.Trace(err, "createExtent: failed to create connection, eh(%v) datapartionHosts(%v)", eh, dp.Hosts[0])

@@ -1,10 +1,10 @@
 package stat
 
+import "C"
 import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/chubaofs/chubaofs/util"
 	"io/ioutil"
 	"os"
 	"path"
@@ -19,15 +19,16 @@ import (
 )
 
 const (
-	Stat_Module        = "client_stat"
+	Stat_Module        = "mem_stat"
 	FileNameDateFormat = "20060102150405"
 	ShiftedExtension   = ".old"
+	PRO_MEM            = "/proc/%d/status"
 
 	F_OK                = 0
 	MaxTimeoutLevel     = 3
 	DefaultStatInterval = 60                // 60 seconds
 	DefaultStatLogSize  = 200 * 1024 * 1024 // 200M
-	DefaultHeadRoom     = 2 * 1024          // 2G
+	DefaultHeadRoom     = 10 * 1024         // 10G
 	MaxReservedDays     = 7 * 24 * time.Hour
 )
 
@@ -72,8 +73,8 @@ type Statistic struct {
 
 var gSt *Statistic = nil
 
-func NewStatistic(dir string, logMaxSize int64, timeOutUs [MaxTimeoutLevel]uint32, useMutex bool) (*Statistic, error) {
-	dir = path.Join(dir, Stat_Module)
+func NewStatistic(dir, logModule string, logMaxSize int64, timeOutUs [MaxTimeoutLevel]uint32, useMutex bool) (*Statistic, error) {
+	dir = path.Join(dir, logModule)
 	fi, err := os.Stat(dir)
 	if err != nil {
 		os.MkdirAll(dir, 0755)
@@ -125,15 +126,11 @@ func (st *Statistic) flushScheduler() {
 		}
 		diskSpaceLeft := int64(fs.Bavail * uint64(fs.Bsize))
 		diskSpaceLeft -= DefaultHeadRoom * 1024 * 1024
-		if diskSpaceLeft <= 0 {
-			go removeLogFile(diskSpaceLeft)
-		} else {
-			continue
-		}
+		removeLogFile(diskSpaceLeft, Stat_Module)
 	}
 }
 
-func removeLogFile(diskSpaceLeft int64) {
+func removeLogFile(diskSpaceLeft int64, module string) {
 	fInfos, err := ioutil.ReadDir(gSt.logDir)
 	if err != nil {
 		log.LogErrorf("ReadDir failed, logDir: %s, err: %v", gSt.logDir, err)
@@ -141,7 +138,7 @@ func removeLogFile(diskSpaceLeft int64) {
 	}
 	var needDelFiles ShiftedFile
 	for _, info := range fInfos {
-		if deleteFileFilter(info, diskSpaceLeft) {
+		if deleteFileFilter(info, diskSpaceLeft, module) {
 			needDelFiles = append(needDelFiles, info)
 		}
 	}
@@ -158,11 +155,11 @@ func removeLogFile(diskSpaceLeft int64) {
 	}
 }
 
-func deleteFileFilter(info os.FileInfo, diskSpaceLeft int64) bool {
+func deleteFileFilter(info os.FileInfo, diskSpaceLeft int64, module string) bool {
 	if diskSpaceLeft <= 0 {
-		return info.Mode().IsRegular() && strings.HasSuffix(info.Name(), ShiftedExtension)
+		return info.Mode().IsRegular() && strings.HasSuffix(info.Name(), ShiftedExtension) && strings.HasPrefix(info.Name(), module)
 	}
-	return time.Since(info.ModTime()) > MaxReservedDays && strings.HasSuffix(info.Name(), ShiftedExtension)
+	return time.Since(info.ModTime()) > MaxReservedDays && strings.HasSuffix(info.Name(), ShiftedExtension) && strings.HasPrefix(info.Name(), module)
 }
 
 func CloseStat() {
@@ -193,11 +190,11 @@ func EndStat(typeName string, err error, bgTime *time.Time, statCount uint32) er
 	}
 
 	if err != nil {
-		_, errParse := strconv.ParseFloat(err.Error(), 64)
-		if errParse == nil {
-			typeName = typeName + "[" + err.Error() + "]"
+		baseLen := len(typeName) + 2
+		if len(err.Error())+baseLen > 41 {
+			typeName = typeName + "[" + err.Error()[:41-baseLen] + "]"
 		} else {
-			typeName = typeName + "[-]"
+			typeName = typeName + "[" + err.Error() + "]"
 		}
 	}
 
@@ -229,14 +226,14 @@ func WriteStat() error {
 	fmt.Fprintf(ioStream, "\n===============  Statistic in %ds, %s  =====================\n",
 		statSpan, time.Now().Format("2006-01-02 15:04:05"))
 
-	if mem, err := util.GetProcessMemory(gSt.pid); err != nil {
+	if virt, res, err := GetProcessMemory(gSt.pid); err != nil {
 		log.LogErrorf("Get process memory failed, err: %v", err)
 		fmt.Fprintf(ioStream, "Get Mem Failed.\n")
 	} else {
-		fmt.Fprintf(ioStream, "Mem Used: %10d kB\n", mem/1024)
+		fmt.Fprintf(ioStream, "Mem Used(kB): VIRT %-10d   RES %-10d\n", virt, res)
 	}
 
-	fmt.Fprintf(ioStream, "%-35s|%8s|%8s|%10s|%10s|%10s|%11s|%11s|%11s|\n",
+	fmt.Fprintf(ioStream, "%-42s|%10s|%8s|%8s|%8s|%8s|%8s|%8s|%8s|\n",
 		"", "TOTAL", "FAILED", "AVG(ms)", "MAX(ms)", "MIN(ms)",
 		">"+strconv.Itoa(int(gSt.timeOutUs[0])/1000)+"ms",
 		">"+strconv.Itoa(int(gSt.timeOutUs[1])/1000)+"ms",
@@ -255,14 +252,14 @@ func WriteStat() error {
 			avgUs = int32(typeInfo.allTimeUs / time.Duration(typeInfo.allCount))
 		}
 
-		fmt.Fprintf(ioStream, "%-35s|%8d|%8d|%10.2f|%10.2f|%10.2f|%11d|%11d|%11d|\n",
+		fmt.Fprintf(ioStream, "%-42s|%10d|%8d|%8.2f|%8.2f|%8.2f|%8d|%8d|%8d|\n",
 			typeInfo.typeName, typeInfo.allCount, typeInfo.failCount,
 			float32(avgUs)/1000, float32(typeInfo.maxTime)/1000, float32(typeInfo.minTime)/1000,
 			typeInfo.timeOut[0], typeInfo.timeOut[1], typeInfo.timeOut[2])
 	}
 
 	fmt.Fprintf(ioStream, "-------------------------------------------------------------------"+
-		"--------------------------------------------------------\n")
+		"--------------------------------------------------\n")
 
 	// clear stat
 	gSt.lastClearTime = time.Now()
@@ -380,4 +377,37 @@ func shiftFiles() error {
 
 func StatBandWidth(typeName string, Size uint32) {
 	EndStat(typeName+"[FLOW_KB]", nil, nil, Size/1024)
+}
+
+func GetProcessMemory(pid int) (Virt, Res uint64, err error) {
+	proFileName := fmt.Sprintf(PRO_MEM, pid)
+	fp, err := os.Open(proFileName)
+	if err != nil {
+		return
+	}
+	defer fp.Close()
+	scan := bufio.NewScanner(fp)
+	for scan.Scan() {
+		line := scan.Text()
+		fields := strings.Split(line, ":")
+		key := fields[0]
+		if key == "VmRSS" {
+			value := strings.TrimSpace(fields[1])
+			value = strings.Replace(value, " kB", "", -1)
+			Res, err = strconv.ParseUint(value, 10, 64)
+			if err != nil {
+				return
+			}
+		} else if key == "VmSize" {
+			value := strings.TrimSpace(fields[1])
+			value = strings.Replace(value, " kB", "", -1)
+			Virt, err = strconv.ParseUint(value, 10, 64)
+			if err != nil {
+				return
+			}
+		} else {
+			continue
+		}
+	}
+	return
 }

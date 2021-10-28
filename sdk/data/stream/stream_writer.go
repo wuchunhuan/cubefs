@@ -260,6 +260,7 @@ func (s *Streamer) handleRequest(request interface{}) {
 }
 
 func (s *Streamer) write(data []byte, offset, size, flags int) (total int, err error) {
+
 	var direct bool
 
 	if flags&proto.FlagsSyncWrite != 0 {
@@ -438,6 +439,7 @@ func (s *Streamer) doWrite(data []byte, offset, size int, direct bool) (total in
 }
 
 func (s *Streamer) flush() (err error) {
+
 	for {
 		element := s.dirtylist.Get()
 		if element == nil {
