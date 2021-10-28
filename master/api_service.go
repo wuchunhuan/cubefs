@@ -472,7 +472,7 @@ func (m *Server) deleteMetaReplica(w http.ResponseWriter, r *http.Request) {
 	validate := true
 	var value string
 	if value = r.FormValue(forceKey); value != "" {
-		if force, err = strconv.ParseBool(value); err==nil && force {
+		if force, err = strconv.ParseBool(value); err == nil && force {
 			validate = false
 		}
 	}
