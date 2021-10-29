@@ -238,7 +238,7 @@ var snap_ack = []byte{1}
 func (t *replicateTransport) handleSnapshot(m *proto.Message, conn *util.ConnTimeout, bufRd *util.BufferReader) error {
 	conn.SetReadTimeout(time.Minute)
 	conn.SetWriteTimeout(15 * time.Second)
-	bufRd.Grow(30 * MB)
+	bufRd.Grow(1 * MB)
 	req := newSnapshotRequest(m, bufRd)
 	t.raftServer.reciveSnapshot(req)
 
