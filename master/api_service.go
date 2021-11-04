@@ -473,7 +473,7 @@ func (m *Server) deleteMetaReplica(w http.ResponseWriter, r *http.Request) {
 	var value string
 	if value = r.FormValue(forceKey); value != "" {
 		if force, err = strconv.ParseBool(value); err == nil && force {
-			validate = false
+			// validate = false  // ignore force param which too dangerous without check
 		}
 	}
 	if err = m.cluster.deleteMetaReplica(mp, addr, validate); err != nil {
