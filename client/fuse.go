@@ -35,6 +35,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/chubaofs/chubaofs/sdk/master"
 
@@ -57,6 +58,7 @@ const (
 	MaxReadAhead = 512 * 1024
 
 	defaultRlimit uint64 = 1024000
+	Retry                = 3
 )
 
 const (
@@ -433,11 +435,19 @@ func parseLogLevel(loglvl string) log.Level {
 
 func changeRlimit(val uint64) {
 	rlimit := &syscall.Rlimit{Max: val, Cur: val}
-	err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, rlimit)
+	var err error
+	for i := 1; i <= Retry; i++ {
+		err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, rlimit)
+		if err == nil {
+			syslog.Printf("Successfully set rlimit to %v \n", val)
+			return
+		}
+		if i < Retry {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 	if err != nil {
-		syslog.Printf("Failed to set rlimit to %v \n", val)
-	} else {
-		syslog.Printf("Successfully set rlimit to %v \n", val)
+		syslog.Printf("Failed to set rlimit to %v, err %v\n", val, err)
 	}
 }
 
