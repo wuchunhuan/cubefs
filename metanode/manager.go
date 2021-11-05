@@ -382,7 +382,7 @@ func (m *metadataManager) attachPartition(id uint64, partition MetaPartition) (e
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.partitions[id] = partition
-	log.LogInfof("load meta partition %v success", id)
+	syslog.Println(fmt.Sprintf("load meta partition %v success", id))
 	return
 }
 
