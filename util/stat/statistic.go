@@ -198,7 +198,7 @@ func EndStat(typeName string, err error, bgTime *time.Time, statCount uint32) er
 		}
 	}
 
-	return AddStat(typeName, err, bgTime, statCount)
+	return addStat(typeName, err, bgTime, statCount)
 }
 
 func WriteStat() error {
@@ -284,7 +284,7 @@ func ClearStat() {
 	gSt.typeInfoMap = make(map[string]*typeInfo)
 }
 
-func AddStat(typeName string, err error, bgTime *time.Time, statCount uint32) error {
+func addStat(typeName string, err error, bgTime *time.Time, statCount uint32) error {
 	if gSt == nil {
 		return nil
 	}
