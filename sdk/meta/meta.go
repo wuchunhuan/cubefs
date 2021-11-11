@@ -76,6 +76,7 @@ type MetaConfig struct {
 	TicketMess       auth.TicketMess
 	ValidateOwner    bool
 	OnAsyncTaskError AsyncTaskErrorFunc
+	MetaSendTimeout  int64
 }
 
 type MetaWrapper struct {
@@ -126,6 +127,8 @@ type MetaWrapper struct {
 	// Used to trigger and throttle instant partition updates
 	forceUpdate      chan struct{}
 	forceUpdateLimit *rate.Limiter
+
+	metaSendTimeout int64
 }
 
 //the ticket from authnode
@@ -161,6 +164,7 @@ func NewMetaWrapper(config *MetaConfig) (*MetaWrapper, error) {
 	mw.ownerValidation = config.ValidateOwner
 	mw.mc = masterSDK.NewMasterClient(config.Masters, false)
 	mw.onAsyncTaskError = config.OnAsyncTaskError
+	mw.metaSendTimeout = config.MetaSendTimeout
 	mw.conns = util.NewConnectPool()
 	mw.partitions = make(map[uint64]*MetaPartition)
 	mw.ranges = btree.New(32)
