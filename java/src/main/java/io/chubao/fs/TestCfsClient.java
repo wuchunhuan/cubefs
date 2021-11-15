@@ -8,10 +8,13 @@ public class TestCfsClient {
     public static void main(String[] args) throws FileNotFoundException {
         CfsMount mnt = new CfsMount();
 
-        mnt.setClient("volName", "ltptest");
-        mnt.setClient("masterAddr", "192.168.0.11:17010,192.168.0.12:17010,192.168.0.13:17010");
-        mnt.setClient("logDir", "/home/liushuoran/log");
-        mnt.setClient("logLeval", "info");
+        mnt.setClient("volName", "hot_lee");
+        mnt.setClient("masterAddr", "10.177.69.105:17010,10.177.69.106:17010,10.177.117.108:17010");
+        mnt.setClient("logDir", "/home/ADC/80301920/Documents/logs");
+        mnt.setClient("logLeval", "debug");
+        mnt.setClient("accessKey", "cCwD");
+        mnt.setClient("secretKey", "dicRzKnr");
+        mnt.setClient("enableSummary", "true");
         int ret = mnt.startClient();
         if (ret < 0) {
             System.out.println("start client failed!!!");
@@ -132,6 +135,16 @@ public class TestCfsClient {
             ret = mnt.getAttr(targetPath, stat);
             System.out.println("mode: " + stat.mode);
             mnt.close(fd);
+        } else if (args[0].equals("summary")) {
+            CfsLibrary.SummaryInfo.ByReference summaryInfo = new CfsLibrary.SummaryInfo.ByReference();
+            ret = mnt.getsummary(targetPath, summaryInfo, 10);
+            if (ret < 0) {
+                System.out.println("Getsummary failed: " + ret);
+                return;
+            }
+            System.out.println("files: " + summaryInfo.rfiles);
+            System.out.println("subdirs: " + summaryInfo.rsubdirs);
+            System.out.println("bytes: " + summaryInfo.rbytes);
         }
 
         mnt.closeClient();

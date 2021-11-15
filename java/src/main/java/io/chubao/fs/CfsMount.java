@@ -5,6 +5,7 @@ import com.sun.jna.Pointer;
 
 import io.chubao.fs.CfsLibrary.Dirent;
 import io.chubao.fs.CfsLibrary.DirentArray;
+import io.chubao.fs.CfsLibrary.SummaryInfo;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -162,6 +163,10 @@ public class CfsMount {
 
     public int fchmod(int fd, int mode) {
         return libcfs.cfs_fchmod(this.cid, fd, mode);
+    }
+
+    public int getsummary(String path, SummaryInfo.ByReference summaryInfo, int goroutineNum) {
+        return libcfs.cfs_getsummary(this.cid, path, summaryInfo, "false", goroutineNum);
     }
 
 }
