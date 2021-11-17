@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +34,8 @@ const (
 )
 
 var DefaultTimeOutUs = [3]uint32{100000, 500000, 1000000}
+
+var re = regexp.MustCompile(`\([0-9]*\)`)
 
 type ShiftedFile []os.FileInfo
 
@@ -190,13 +193,15 @@ func EndStat(typeName string, err error, bgTime *time.Time, statCount uint32) er
 	}
 
 	if err != nil {
+		newErrStr := string(re.ReplaceAll([]byte(err.Error()),[]byte("(xxx)")))
 		baseLen := len(typeName) + 2
-		if len(err.Error())+baseLen > 41 {
-			typeName = typeName + "[" + err.Error()[:41-baseLen] + "]"
+		if len(newErrStr)+baseLen > 41 {
+			typeName = typeName + "[" + newErrStr[:41-baseLen] + "]"
 		} else {
-			typeName = typeName + "[" + err.Error() + "]"
+			typeName = typeName + "[" + newErrStr + "]"
 		}
 	}
+
 
 	return addStat(typeName, err, bgTime, statCount)
 }
