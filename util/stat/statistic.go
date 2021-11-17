@@ -28,7 +28,7 @@ const (
 	MaxTimeoutLevel     = 3
 	DefaultStatInterval = 60                // 60 seconds
 	DefaultStatLogSize  = 200 * 1024 * 1024 // 200M
-	DefaultHeadRoom     = 10 * 1024         // 10G
+	DefaultHeadRoom     = 50 * 1024         // 50G
 	MaxReservedDays     = 7 * 24 * time.Hour
 )
 
