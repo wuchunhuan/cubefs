@@ -68,7 +68,9 @@ func NewFile(s *Super, i *proto.InodeInfo, parentIno uint64) fs.Node {
 func (f *File) Attr(ctx context.Context, a *fuse.Attr) error {
 	var err error
 	bgTime := stat.BeginStat()
-	stat.EndStat("Attr", err, bgTime, 1)
+	defer func() {
+		stat.EndStat("Attr", err, bgTime, 1)
+	}()
 
 	ino := f.info.Inode
 	info, err := f.super.InodeGet(ino)

@@ -69,6 +69,20 @@ public interface CfsLibrary extends Library {
         }
     }
 
+    class SummaryInfo extends Structure {
+        public static class ByValue extends SummaryInfo implements Structure.ByValue {}
+        public static class ByReference extends SummaryInfo implements Structure.ByReference {}
+
+        public int rfiles;
+        public int rsubdirs;
+        public long rbytes;
+
+        @Override
+        protected List<String> getFieldOrder() {
+            return Arrays.asList(new String[]{"rfiles", "rsubdirs", "rbytes"});
+        }
+    }
+
     // exports from shared library
     long cfs_new_client();
 
@@ -107,4 +121,6 @@ public interface CfsLibrary extends Library {
     int cfs_rename(long id, String from, String to);
 
     int cfs_fchmod(long id, int fd, int mode);
+
+    int cfs_getsummary(long cid, String path, SummaryInfo.ByReference summaryInfo, String useCache, int goroutineNum);
 }
