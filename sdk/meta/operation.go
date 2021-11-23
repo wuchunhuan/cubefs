@@ -16,10 +16,11 @@ package meta
 
 import (
 	"fmt"
-	"github.com/chubaofs/chubaofs/util/errors"
-	"github.com/chubaofs/chubaofs/util/stat"
 	"strconv"
 	"sync"
+
+	"github.com/chubaofs/chubaofs/util/errors"
+	"github.com/chubaofs/chubaofs/util/stat"
 
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/util/exporter"
@@ -418,6 +419,8 @@ func (mw *MetaWrapper) iget(mp *MetaPartition, inode uint64) (status int, info *
 	packet, err = mw.sendToMetaPartition(mp, packet)
 	if err != nil {
 		log.LogErrorf("iget: packet(%v) mp(%v) req(%v) err(%v)", packet, mp, *req, err)
+		errMetric := exporter.NewCounter("fileOpenFailed")
+		errMetric.AddWithLabels(1, map[string]string{exporter.Vol: mw.volname, exporter.Err: "EIO"})
 		return
 	}
 
@@ -425,6 +428,8 @@ func (mw *MetaWrapper) iget(mp *MetaPartition, inode uint64) (status int, info *
 	if status != statusOK {
 		err = errors.New(packet.GetResultMsg())
 		log.LogErrorf("iget: packet(%v) mp(%v) req(%v) result(%v)", packet, mp, *req, packet.GetResultMsg())
+		errMetric := exporter.NewCounter("fileOpenFailed")
+		errMetric.AddWithLabels(1, map[string]string{exporter.Vol: mw.volname, exporter.Err: "EIO"})
 		return
 	}
 
@@ -432,6 +437,8 @@ func (mw *MetaWrapper) iget(mp *MetaPartition, inode uint64) (status int, info *
 	err = packet.UnmarshalData(resp)
 	if err != nil || resp.Info == nil {
 		log.LogErrorf("iget: packet(%v) mp(%v) req(%v) err(%v) PacketData(%v)", packet, mp, *req, err, string(packet.Data))
+		errMetric := exporter.NewCounter("fileOpenFailed")
+		errMetric.AddWithLabels(1, map[string]string{exporter.Vol: mw.volname, exporter.Err: "EIO"})
 		return
 	}
 	return statusOK, resp.Info, nil

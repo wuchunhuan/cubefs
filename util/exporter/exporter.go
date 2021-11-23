@@ -51,6 +51,7 @@ const (
 	PartId = "partid"
 	Op     = "op"
 	Type   = "type"
+	Err    = "err"
 )
 
 var (
@@ -196,6 +197,10 @@ func autoPush(pushAddr, role, cluster, ip, mountPoint string) {
 		Timeout: time.Second * 10,
 	}
 
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.LogWarnf("get host name failed %v", err)
+	}
 	pusher := push.New(pushAddr, "cbfs").
 		Client(client).
 		Gatherer(registry).
@@ -207,9 +212,11 @@ func autoPush(pushAddr, role, cluster, ip, mountPoint string) {
 		Grouping("dataset", "custom").
 		Grouping("category", "custom").
 		Grouping("app", AppName).
-		Grouping("mountPoint", mountPoint)
+		Grouping("mountPoint", mountPoint).
+		Grouping("hostName", hostname)
 
-	log.LogInfof("start push data, ip %s, addr %s, role %s, cluster %s, mountPoint %s", ip, pushAddr, role, cluster, mountPoint)
+	log.LogInfof("start push data, ip %s, addr %s, role %s, cluster %s, mountPoint %s, hostName %s",
+		ip, pushAddr, role, cluster, mountPoint, hostname)
 
 	ticker := time.NewTicker(time.Second * 15)
 	go func() {
