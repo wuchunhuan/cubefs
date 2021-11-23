@@ -16,9 +16,10 @@ package fs
 
 import (
 	"fmt"
-	"github.com/chubaofs/chubaofs/util/stat"
 	"io"
 	"time"
+
+	"github.com/chubaofs/chubaofs/util/stat"
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
@@ -195,12 +196,16 @@ func (f *File) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadR
 	if err != nil && err != io.EOF {
 		msg := fmt.Sprintf("Read: ino(%v) req(%v) err(%v) size(%v)", f.info.Inode, req, err, size)
 		f.super.handleError("Read", msg)
+		errMetric := exporter.NewCounter("fileReadFailed")
+		errMetric.AddWithLabels(1, map[string]string{exporter.Vol: f.super.volname, exporter.Err: "EIO"})
 		return fuse.EIO
 	}
 
 	if size > req.Size {
 		msg := fmt.Sprintf("Read: read size larger than request size, ino(%v) req(%v) size(%v)", f.info.Inode, req, size)
 		f.super.handleError("Read", msg)
+		errMetric := exporter.NewCounter("fileReadFailed")
+		errMetric.AddWithLabels(1, map[string]string{exporter.Vol: f.super.volname, exporter.Err: "ERANGE"})
 		return fuse.ERANGE
 	}
 
@@ -271,6 +276,8 @@ func (f *File) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.Wri
 	if err != nil {
 		msg := fmt.Sprintf("Write: ino(%v) offset(%v) len(%v) err(%v)", ino, req.Offset, reqlen, err)
 		f.super.handleError("Write", msg)
+		errMetric := exporter.NewCounter("fileWriteFailed")
+		errMetric.AddWithLabels(1, map[string]string{exporter.Vol: f.super.volname, exporter.Err: "EIO"})
 		return fuse.EIO
 	}
 
@@ -283,6 +290,8 @@ func (f *File) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.Wri
 		if err = f.super.ec.Flush(ino); err != nil {
 			msg := fmt.Sprintf("Write: failed to wait for flush, ino(%v) offset(%v) len(%v) err(%v) req(%v)", ino, req.Offset, reqlen, err, req)
 			f.super.handleError("Wrtie", msg)
+			errMetric := exporter.NewCounter("fileWriteFailed")
+			errMetric.AddWithLabels(1, map[string]string{exporter.Vol: f.super.volname, exporter.Err: "EIO"})
 			return fuse.EIO
 		}
 	}
