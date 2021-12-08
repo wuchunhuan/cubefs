@@ -193,7 +193,7 @@ func EndStat(typeName string, err error, bgTime *time.Time, statCount uint32) er
 	}
 
 	if err != nil {
-		newErrStr := string(re.ReplaceAll([]byte(err.Error()),[]byte("(xxx)")))
+		newErrStr := string(re.ReplaceAll([]byte(err.Error()), []byte("(xxx)")))
 		baseLen := len(typeName) + 2
 		if len(newErrStr)+baseLen > 41 {
 			typeName = typeName + "[" + newErrStr[:41-baseLen] + "]"
@@ -201,7 +201,6 @@ func EndStat(typeName string, err error, bgTime *time.Time, statCount uint32) er
 			typeName = typeName + "[" + newErrStr + "]"
 		}
 	}
-
 
 	return addStat(typeName, err, bgTime, statCount)
 }
