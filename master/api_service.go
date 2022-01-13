@@ -2072,6 +2072,13 @@ func (m *Server) removeRaftNode(w http.ResponseWriter, r *http.Request) {
 	sendOkReply(w, r, newSuccessHTTPReply(msg))
 }
 
+// get master's raft status
+func (m *Server) getRaftStatus(w http.ResponseWriter, r *http.Request) {
+	data := m.raftStore.RaftStatus(GroupID)
+	log.LogInfof("get raft status, %s", data.String())
+	sendOkReply(w, r, newSuccessHTTPReply(data))
+}
+
 // Parse the request that adds/deletes a raft node.
 func parseRequestForRaftNode(r *http.Request) (id uint64, host string, err error) {
 	if err = r.ParseForm(); err != nil {
