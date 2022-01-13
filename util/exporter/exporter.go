@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +43,7 @@ const (
 	ConfigKeyEnablePid      = "enablePid"      // enable report partition id
 	ConfigKeyPushAddr       = "pushAddr"       // enable report partition id
 	ChSize                  = 1024 * 10        //collect chan size
+	SubDir                  = "subdir"         //mount point (subdir)
 
 	// monitor label name
 	Vol    = "vol"
@@ -151,15 +151,13 @@ func RegistConsul(cluster string, role string, cfg *config.Config) {
 		log.LogErrorf("get local ip error, %v", err.Error())
 		return
 	}
-	rawmnt := cfg.GetString("subdir")
-	if rawmnt == "" {
-		rawmnt = "/"
+	mountSubDir := cfg.GetString(SubDir)
+	if mountSubDir == "" {
+		mountSubDir = "/"
 	}
-	mountPoint, _ := filepath.Abs(rawmnt)
-
 	if enablePush {
 		log.LogWarnf("[RegisterConsul] use auto push data strategy, not register consul")
-		autoPush(pushAddr, role, cluster, host, mountPoint)
+		autoPush(pushAddr, role, cluster, host, mountSubDir)
 		return
 	}
 

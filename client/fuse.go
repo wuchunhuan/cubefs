@@ -199,6 +199,9 @@ func main() {
 	if cfg.GetString(exporter.ConfigKeyPushAddr) == "" {
 		cfg.SetString(exporter.ConfigKeyPushAddr, "cfs-push.oppo.local")
 	}
+	if cfg.GetString(exporter.SubDir) == "" && opt.SubDir != "" {
+		cfg.SetString(exporter.SubDir, opt.SubDir)
+	}
 
 	exporter.Init(ModuleName, cfg)
 	exporter.RegistConsul(super.ClusterName(), ModuleName, cfg)
