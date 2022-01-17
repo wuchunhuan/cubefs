@@ -16,12 +16,13 @@ package stream
 
 import (
 	"fmt"
-	"golang.org/x/net/context"
 	"hash/crc32"
 	"net"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/sdk/data/wrapper"
@@ -510,15 +511,22 @@ func (s *Streamer) traverse() (err error) {
 }
 
 func (s *Streamer) closeOpenHandler() {
-	if s.handler != nil {
-		s.handler.setClosed()
-		if s.dirtylist.Len() < MaxDirtyListLen {
-			s.handler.flushPacket()
-		} else {
-			// TODO unhandled error
-			s.handler.flush()
-		}
+	// just in case to avoid infinite loop
+	var cnt int = 2 * MaxPacketErrorCount
 
+	handler := s.handler
+	for handler != nil && cnt >= 0 {
+		handler.setClosed()
+		if s.dirtylist.Len() < MaxDirtyListLen {
+			handler.flushPacket()
+		} else {
+			handler.flush()
+		}
+		handler = handler.recoverHandler
+		cnt--
+	}
+
+	if s.handler != nil {
 		if !s.dirty {
 			// in case the current handler is not on the dirty list and will not get cleaned up
 			// TODO unhandled error
