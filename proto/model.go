@@ -135,7 +135,14 @@ type ClusterStatInfo struct {
 type ZoneStat struct {
 	DataNodeStat *ZoneNodesStat
 	MetaNodeStat *ZoneNodesStat
+	NodeSet      map[uint64]*NodeSetStat
 }
+
+type NodeSetStat struct {
+	DataNodeStat *ZoneNodesStat
+	MetaNodeStat *ZoneNodesStat
+}
+
 type ZoneNodesStat struct {
 	Total         float64 `json:"TotalGB"`
 	Used          float64 `json:"UsedGB"`

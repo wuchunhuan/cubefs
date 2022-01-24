@@ -38,7 +38,20 @@ func newVolStatInfo(name string, total, used uint64, ratio string) *volStatInfo 
 }
 
 func newZoneStatInfo() *proto.ZoneStat {
-	return &proto.ZoneStat{DataNodeStat: new(proto.ZoneNodesStat), MetaNodeStat: new(proto.ZoneNodesStat)}
+	zs := &proto.ZoneStat{
+		DataNodeStat: new(proto.ZoneNodesStat),
+		MetaNodeStat: new(proto.ZoneNodesStat),
+		NodeSet:      make(map[uint64]*proto.NodeSetStat),
+	}
+	return zs
+}
+
+func newNodeSetStat() *proto.NodeSetStat {
+	nss := &proto.NodeSetStat{
+		DataNodeStat: new(proto.ZoneNodesStat),
+		MetaNodeStat: new(proto.ZoneNodesStat),
+	}
+	return nss
 }
 
 // Check the total space, available space, and daily-used space in data nodes,  meta nodes, and volumes
@@ -94,6 +107,47 @@ func (c *Cluster) updateZoneStatInfo() {
 			zs.MetaNodeStat.Total = 1
 		}
 		zs.MetaNodeStat.UsedRatio = fixedPoint(float64(zs.MetaNodeStat.Used)/float64(zs.MetaNodeStat.Total), 2)
+
+		nsc := zone.getAllNodeSet()
+		for _, ns := range nsc {
+			nsStat := newNodeSetStat()
+			zs.NodeSet[ns.ID] = nsStat
+			ns.dataNodes.Range(func(key, value interface{}) bool {
+				nsStat.DataNodeStat.TotalNodes++
+				node := value.(*DataNode)
+				if node.isActive && node.isWriteAble() {
+					nsStat.DataNodeStat.WritableNodes++
+				}
+				nsStat.DataNodeStat.Total += float64(node.Total) / float64(util.GB)
+				nsStat.DataNodeStat.Used += float64(node.Used) / float64(util.GB)
+				return true
+			})
+			nsStat.DataNodeStat.Total = fixedPoint(nsStat.DataNodeStat.Total, 2)
+			nsStat.DataNodeStat.Used = fixedPoint(nsStat.DataNodeStat.Used, 2)
+			nsStat.DataNodeStat.Avail = fixedPoint(nsStat.DataNodeStat.Total-nsStat.DataNodeStat.Used, 2)
+			if nsStat.DataNodeStat.Total == 0 {
+				nsStat.DataNodeStat.Total = 1
+			}
+			nsStat.DataNodeStat.UsedRatio = fixedPoint(float64(nsStat.DataNodeStat.Used)/float64(nsStat.DataNodeStat.Total), 2)
+
+			ns.metaNodes.Range(func(key, value interface{}) bool {
+				node := value.(*MetaNode)
+				nsStat.MetaNodeStat.TotalNodes++
+				if node.IsActive && node.isWritable() {
+					nsStat.MetaNodeStat.WritableNodes++
+				}
+				nsStat.MetaNodeStat.Total += float64(node.Total) / float64(util.GB)
+				nsStat.MetaNodeStat.Used += float64(node.Used) / float64(util.GB)
+				return true
+			})
+			nsStat.MetaNodeStat.Total = fixedPoint(nsStat.MetaNodeStat.Total, 2)
+			nsStat.MetaNodeStat.Used = fixedPoint(nsStat.MetaNodeStat.Used, 2)
+			nsStat.MetaNodeStat.Avail = fixedPoint(nsStat.MetaNodeStat.Total-nsStat.MetaNodeStat.Used, 2)
+			if nsStat.MetaNodeStat.Total == 0 {
+				nsStat.MetaNodeStat.Total = 1
+			}
+			nsStat.MetaNodeStat.UsedRatio = fixedPoint(float64(nsStat.MetaNodeStat.Used)/float64(nsStat.MetaNodeStat.Total), 2)
+		}
 	}
 }
 
