@@ -152,7 +152,7 @@ func (s *DataNode) handlePacketToCreateExtent(p *repl.Packet) {
 		}
 	}()
 	partition := p.Object.(*DataPartition)
-	if partition.Available() <= 0 || partition.disk.Status == proto.ReadOnly || partition.IsRejectWrite() {
+	if partition.Available() <= 0 || !partition.disk.CanWrite() {
 		err = storage.NoSpaceError
 		return
 	} else if partition.disk.Status == proto.Unavailable {
@@ -407,7 +407,7 @@ func (s *DataNode) handleWritePacket(p *repl.Packet) {
 	}()
 	partition := p.Object.(*DataPartition)
 	metricPartitionIOLabels := GetIoMetricLabels(partition, "write")
-	if partition.Available() <= 0 || partition.disk.Status == proto.ReadOnly || partition.IsRejectWrite() {
+	if partition.Available() <= 0 || !partition.disk.CanWrite() {
 		err = storage.NoSpaceError
 		return
 	} else if partition.disk.Status == proto.Unavailable {
