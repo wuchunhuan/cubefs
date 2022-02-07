@@ -75,6 +75,7 @@ func NewSuper(opt *proto.MountOptions) (s *Super, err error) {
 		TicketMess:    opt.TicketMess,
 		ValidateOwner: opt.Authenticate || opt.AccessKey == "",
 		EnableSummary: opt.EnableSummary && opt.EnableXattr,
+		MetaSendTimeout: opt.MetaSendTimeout,
 	}
 	s.mw, err = meta.NewMetaWrapper(metaConfig)
 	if err != nil {
@@ -125,7 +126,9 @@ func NewSuper(opt *proto.MountOptions) (s *Super, err error) {
 	if s.rootIno, err = s.mw.GetRootIno(opt.SubDir); err != nil {
 		return nil, err
 	}
-	s.sc = NewSummaryCache(DefaultSummaryExpiration, MaxSummaryCache)
+	if opt.EnableSummary {
+		s.sc = NewSummaryCache(DefaultSummaryExpiration, MaxSummaryCache)
+	}
 
 	log.LogInfof("NewSuper: cluster(%v) volname(%v) icacheExpiration(%v) LookupValidDuration(%v) AttrValidDuration(%v)", s.cluster, s.volname, inodeExpiration, LookupValidDuration, AttrValidDuration)
 	return s, nil

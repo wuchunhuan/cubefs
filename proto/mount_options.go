@@ -49,6 +49,7 @@ const (
 	EnablePosixACL
 
 	EnableSummary
+	MetaSendTimeout
 	MaxMountOption
 )
 
@@ -114,6 +115,7 @@ func InitMountOptions(opts []MountOption) {
 	opts[EnableXattr] = MountOption{"enableXattr", "Enable xattr support", "", false}
 	opts[EnablePosixACL] = MountOption{"enablePosixACL", "enable posix ACL support", "", false}
 	opts[EnableSummary] = MountOption{"enableSummary", "enable content summary", "", false}
+	opts[MetaSendTimeout] = MountOption{"metaSendTimeout", "Meta send timeout", "", int64(600)}
 
 	for i := 0; i < MaxMountOption; i++ {
 		flag.StringVar(&opts[i].cmdlineValue, opts[i].keyword, "", opts[i].description)
@@ -244,4 +246,5 @@ type MountOptions struct {
 	NearRead       bool
 	EnablePosixACL bool
 	EnableSummary  bool
+	MetaSendTimeout int64
 }
