@@ -16,8 +16,8 @@ package fs
 
 import "C"
 import (
-	"github.com/chubaofs/chubaofs/sdk/meta"
-	"github.com/chubaofs/chubaofs/util/stat"
+	"github.com/cubefs/cubefs/sdk/meta"
+	"github.com/cubefs/cubefs/util/stat"
 	"io"
 	"os"
 	"strconv"
@@ -29,9 +29,9 @@ import (
 	"bazil.org/fuse/fs"
 	"golang.org/x/net/context"
 
-	"github.com/chubaofs/chubaofs/proto"
-	"github.com/chubaofs/chubaofs/util/exporter"
-	"github.com/chubaofs/chubaofs/util/log"
+	"github.com/cubefs/cubefs/proto"
+	"github.com/cubefs/cubefs/util/exporter"
+	"github.com/cubefs/cubefs/util/log"
 )
 
 // used to locate the position in parent

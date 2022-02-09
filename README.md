@@ -80,6 +80,10 @@ Small file operation performance and scalability benchmark test by [mdtest](http
 Refer to [cubefs.readthedocs.io](https://cubefs.readthedocs.io/en/latest/evaluation.html) for performance and scalability of `IO` and `Metadata`.
 
 ## Build CubeFS
+Prerequisite:
+* Go version `>=1.16`
+* `export GO111MODULE=off`
+
 
 ### Build for x86
 ```
