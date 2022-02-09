@@ -68,13 +68,13 @@ func NewSuper(opt *proto.MountOptions) (s *Super, err error) {
 	s = new(Super)
 	var masters = strings.Split(opt.Master, meta.HostsSeparator)
 	var metaConfig = &meta.MetaConfig{
-		Volume:        opt.Volname,
-		Owner:         opt.Owner,
-		Masters:       masters,
-		Authenticate:  opt.Authenticate,
-		TicketMess:    opt.TicketMess,
-		ValidateOwner: opt.Authenticate || opt.AccessKey == "",
-		EnableSummary: opt.EnableSummary && opt.EnableXattr,
+		Volume:          opt.Volname,
+		Owner:           opt.Owner,
+		Masters:         masters,
+		Authenticate:    opt.Authenticate,
+		TicketMess:      opt.TicketMess,
+		ValidateOwner:   opt.Authenticate || opt.AccessKey == "",
+		EnableSummary:   opt.EnableSummary && opt.EnableXattr,
 		MetaSendTimeout: opt.MetaSendTimeout,
 	}
 	s.mw, err = meta.NewMetaWrapper(metaConfig)
