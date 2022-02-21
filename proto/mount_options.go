@@ -50,6 +50,8 @@ const (
 
 	EnableSummary
 	MetaSendTimeout
+	BuffersTotalLimit
+
 	MaxMountOption
 )
 
@@ -116,6 +118,7 @@ func InitMountOptions(opts []MountOption) {
 	opts[EnablePosixACL] = MountOption{"enablePosixACL", "enable posix ACL support", "", false}
 	opts[EnableSummary] = MountOption{"enableSummary", "enable content summary", "", false}
 	opts[MetaSendTimeout] = MountOption{"metaSendTimeout", "Meta send timeout", "", int64(600)}
+	opts[BuffersTotalLimit] = MountOption{"buffersTotalLimit", "Send/Receive packets memory limit", "", int64(32768)}//default 4G
 
 	for i := 0; i < MaxMountOption; i++ {
 		flag.StringVar(&opts[i].cmdlineValue, opts[i].keyword, "", opts[i].description)
@@ -247,4 +250,5 @@ type MountOptions struct {
 	EnablePosixACL  bool
 	EnableSummary   bool
 	MetaSendTimeout int64
+	BuffersTotalLimit int64
 }
