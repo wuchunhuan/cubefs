@@ -400,6 +400,7 @@ func (m *Server) deleteDataReplica(w http.ResponseWriter, r *http.Request) {
 		dp          *DataPartition
 		partitionID uint64
 		err         error
+		force       bool // now only used in two replicas in the scenario of no leader
 	)
 
 	if partitionID, addr, err = parseRequestToRemoveDataReplica(r); err != nil {
@@ -412,7 +413,18 @@ func (m *Server) deleteDataReplica(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = m.cluster.removeDataReplica(dp, addr, true); err != nil {
+	// force only be used in scenario that dp of two replicas volume no leader caused by one replica crash
+	var value string
+	if value = r.FormValue(forceKey); value != "" {
+		force, _ = strconv.ParseBool(value)
+		if force && dp.ReplicaNum != 2 {
+			msg = fmt.Sprintf("failed! replicaNum [%v] and force should be used in two replcias datapartition", dp.ReplicaNum)
+			sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: msg })
+			return
+		}
+	}
+
+	if err = m.cluster.removeDataReplica(dp, addr, true, force); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
@@ -500,9 +512,9 @@ func (m *Server) decommissionDataPartition(w http.ResponseWriter, r *http.Reques
 		sendErrReply(w, r, newErrHTTPReply(proto.ErrDataPartitionNotExists))
 		return
 	}
-	if dp.isSingleReplica() {
-		rstMsg = fmt.Sprintf(proto.AdminDecommissionDataPartition+" dataPartitionID :%v  is single replica on node:%v async running,need check later",
-			partitionID, addr)
+	if dp.isSpecialReplicaCnt() {
+		rstMsg = fmt.Sprintf(proto.AdminDecommissionDataPartition+" dataPartitionID :%v  is special replica cnt %v on node:%v async running,need check later",
+			partitionID, dp.ReplicaNum, addr)
 		go m.cluster.decommissionDataPartition(addr, dp, handleDataPartitionOfflineErr)
 		sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
 		return
@@ -511,7 +523,7 @@ func (m *Server) decommissionDataPartition(w http.ResponseWriter, r *http.Reques
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
-	if !dp.isSingleReplica() {
+	if !dp.isSpecialReplicaCnt() {
 		rstMsg = fmt.Sprintf(proto.AdminDecommissionDataPartition+" dataPartitionID :%v  on node:%v successfully", partitionID, addr)
 		sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
 	}

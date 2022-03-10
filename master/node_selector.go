@@ -163,7 +163,7 @@ func getAvailCarryDataNodeTab(maxTotal uint64, excludeHosts []string, dataNodes 
 			log.LogDebugf("contains return")
 			return true
 		}
-		if !dataNode.isWriteAble() || !dataNode.ToBeOffline {
+		if !dataNode.isWriteAble() || dataNode.ToBeOffline {
 			log.LogInfof("dataNode [%v] is not writeable", dataNode.Addr)
 			log.LogDebugf("isWritable return")
 			return true

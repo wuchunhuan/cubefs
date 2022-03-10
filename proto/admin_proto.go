@@ -151,6 +151,7 @@ type CreateDataPartitionRequest struct {
 	PartitionType string
 	PartitionId   uint64
 	PartitionSize int
+	ReplicaNum    int
 	VolumeId      string
 	IsRandomWrite bool
 	Members       []Peer
@@ -196,6 +197,7 @@ type AddDataPartitionRaftMemberRequest struct {
 type RemoveDataPartitionRaftMemberRequest struct {
 	PartitionId uint64
 	RemovePeer  Peer
+	Force       bool
 }
 
 // AddMetaPartitionRaftMemberRequest defines the request of add raftMember a meta partition.

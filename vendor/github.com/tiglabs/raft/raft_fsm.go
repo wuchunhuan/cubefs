@@ -78,7 +78,7 @@ func newRaftFsm(config *Config, raftConfig *RaftConfig) (*raftFsm, error) {
 		return nil, err
 	}
 	hs, err := raftConfig.Storage.InitialState()
-	log.LogInfo("newRaftFsm hs commit %v", hs.Commit)
+	log.LogInfof("newRaftFsm hs commit %v", hs.Commit)
 	if err != nil {
 		return nil, err
 	}
@@ -315,6 +315,7 @@ func (r *raftFsm) removePeer(peer proto.Peer) (ok bool){
 
 	replica, ok := r.replicas[peer.ID]
 	if !ok {
+		logger.Info("raft[%v] remove peer node id %v not found", r.id, peer.ID)
 		return
 	} else if replica.peer.PeerID != peer.PeerID {
 		if logger.IsEnableInfo() {
@@ -324,6 +325,7 @@ func (r *raftFsm) removePeer(peer proto.Peer) (ok bool){
 	}
 
 	delete(r.replicas, peer.ID)
+	logger.Info("raft[%v] remove peer node id %v,replicas %v", r.id, peer.ID, r.replicas)
 	ok = true
 
 	if peer.ID == r.config.NodeID {

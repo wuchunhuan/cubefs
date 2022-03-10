@@ -881,7 +881,7 @@ func (s *DataNode) handlePacketToDecommissionDataPartition(p *repl.Packet) {
 	}
 	p.PartitionID = req.PartitionId
 
-	isRaftLeader, err = s.forwardToRaftLeader(dp, p)
+	isRaftLeader, err = s.forwardToRaftLeader(dp, p, false)
 	if !isRaftLeader {
 		err = raft.ErrNotLeader
 		return
@@ -948,7 +948,7 @@ func (s *DataNode) handlePacketToAddDataPartitionRaftMember(p *repl.Packet) {
 			"addRaftAddr(%v) has exsit", string(reqData), req.AddPeer.Addr)
 		return
 	}
-	isRaftLeader, err = s.forwardToRaftLeader(dp, p)
+	isRaftLeader, err = s.forwardToRaftLeader(dp, p, false)
 	if !isRaftLeader {
 		return
 	}
@@ -1001,6 +1001,10 @@ func (s *DataNode) handlePacketToRemoveDataPartitionRaftMember(p *repl.Packet) {
 	if dp == nil {
 		return
 	}
+
+	log.LogWarnf("handlePacketToRemoveDataPartitionRaftMember, req(%s) RemoveRaftPeer(%s) dp %v replicaNum %v",
+		string(reqData), req.RemovePeer.Addr, dp.partitionID, dp.replicaNum)
+
 	p.PartitionID = req.PartitionId
 
 	if !dp.needDeleteReplica(req.RemovePeer.Addr) {
@@ -1008,13 +1012,28 @@ func (s *DataNode) handlePacketToRemoveDataPartitionRaftMember(p *repl.Packet) {
 		return
 	}
 
-	isRaftLeader, err = s.forwardToRaftLeader(dp, p)
+	isRaftLeader, err = s.forwardToRaftLeader(dp, p, req.Force)
 	if !isRaftLeader {
 		return
 	}
-	if err = dp.CanRemoveRaftMember(req.RemovePeer); err != nil {
+	if err = dp.CanRemoveRaftMember(req.RemovePeer, req.Force); err != nil {
 		return
 	}
+
+	if dp.replicaNum == 2 && req.Force {
+		cc  := &raftProto.ConfChange{
+			Type:raftProto.ConfRemoveNode,
+			Peer:raftProto.Peer{
+				ID:	req.RemovePeer.ID,
+			},
+			Context: reqData,
+		}
+		s.raftStore.RaftServer().RemoveRaftForce(dp.partitionID, cc)
+		dp.ApplyMemberChange(cc, 0)
+		dp.PersistMetadata()
+		return
+	}
+
 	if req.RemovePeer.ID != 0 {
 		_, err = dp.ChangeRaftMember(raftProto.ConfRemoveNode, raftProto.Peer{ID: req.RemovePeer.ID}, reqData)
 		if err != nil {
@@ -1055,7 +1074,7 @@ func (s *DataNode) handlePacketToDataPartitionTryToLeaderrr(p *repl.Packet) {
 	return
 }
 
-func (s *DataNode) forwardToRaftLeader(dp *DataPartition, p *repl.Packet) (ok bool, err error) {
+func (s *DataNode) forwardToRaftLeader(dp *DataPartition, p *repl.Packet, force bool) (ok bool, err error) {
 	var (
 		conn       *net.TCPConn
 		leaderAddr string
@@ -1067,6 +1086,11 @@ func (s *DataNode) forwardToRaftLeader(dp *DataPartition, p *repl.Packet) (ok bo
 
 	// return NoLeaderError if leaderAddr is nil
 	if leaderAddr == "" {
+		if dp.replicaNum == 2 && force {
+			ok = true
+			log.LogInfof("action[forwardToRaftLeader] no leader but replica num %v continue", dp.replicaNum)
+			return
+		}
 		err = storage.NoLeaderError
 		return
 	}

@@ -65,6 +65,7 @@ type DataPartitionMetadata struct {
 	Hosts                   []string
 	DataPartitionCreateType int
 	LastTruncateID          uint64
+	ReplicaNum              int
 }
 
 type sortedPeers []proto.Peer
@@ -96,6 +97,7 @@ type DataPartition struct {
 	partitionID     uint64
 	partitionStatus int
 	partitionSize   int
+	replicaNum      int
 	replicas        []string // addresses of the replicas
 	replicasLock    sync.RWMutex
 	disk            *Disk
@@ -147,6 +149,7 @@ func CreateDataPartition(dpCfg *dataPartitionCfg, disk *Disk, request *proto.Cre
 	// persist file metadata
 	go dp.StartRaftLoggingSchedule()
 	dp.DataPartitionCreateType = request.CreateType
+	dp.replicaNum = request.ReplicaNum
 	err = dp.PersistMetadata()
 	disk.AddSize(uint64(dp.Size()))
 	return
@@ -209,6 +212,7 @@ func LoadDataPartition(partitionDir string, disk *Disk) (dp *DataPartition, err 
 		VolName:       meta.VolumeID,
 		PartitionSize: meta.PartitionSize,
 		PartitionID:   meta.PartitionID,
+		ReplicaNum:    meta.ReplicaNum,
 		Peers:         meta.Peers,
 		Hosts:         meta.Hosts,
 		RaftStore:     disk.space.GetRaftStore(),
@@ -249,6 +253,7 @@ func newDataPartition(dpCfg *dataPartitionCfg, disk *Disk) (dp *DataPartition, e
 		volumeID:        dpCfg.VolName,
 		clusterID:       dpCfg.ClusterID,
 		partitionID:     partitionID,
+		replicaNum:      dpCfg.ReplicaNum,
 		disk:            disk,
 		dataNode:        disk.dataNode,
 		path:            dataPath,
@@ -262,6 +267,7 @@ func newDataPartition(dpCfg *dataPartitionCfg, disk *Disk) (dp *DataPartition, e
 		config:          dpCfg,
 		raftStatus:      RaftStatusStopped,
 	}
+	log.LogInfof("action[newDataPartition] dp %v replica num %v", partitionID, dpCfg.ReplicaNum)
 	partition.replicasInit()
 	partition.extentStore, err = storage.NewExtentStore(partition.path, dpCfg.PartitionID, dpCfg.PartitionSize)
 	if err != nil {

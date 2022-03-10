@@ -274,7 +274,7 @@ func (vol *Vol) checkReplicaNum(c *Cluster) {
 			continue
 		}
 		if err = dp.removeOneReplicaByHost(c, host); err != nil {
-			if dp.isSingleReplica() && len(dp.Hosts) > 1 {
+			if dp.isSpecialReplicaCnt() && len(dp.Hosts) > 1 {
 				log.LogWarnf("action[checkReplicaNum] removeOneReplicaByHost host [%v],vol[%v],err[%v]", host, vol.Name, err)
 				continue
 			}
