@@ -424,6 +424,9 @@ func (dp *DataPartition) Disk() *Disk {
 
 // Status returns the partition status.
 func (dp *DataPartition) Status() int {
+	if dp.raftStatus == RaftStatusStopped {
+		return proto.Unavailable
+	}
 	return dp.partitionStatus
 }
 
@@ -525,10 +528,12 @@ func (dp *DataPartition) statusUpdate() {
 	if dp.extentStore.GetExtentCount() >= storage.MaxExtentCount {
 		status = proto.ReadOnly
 	}
-	if dp.Status() == proto.Unavailable {
+	if dp.raftStatus == RaftStatusStopped {
 		status = proto.Unavailable
 	}
 
+	log.LogInfof("action[statusUpdate] dp %v raft status %v dp.status %v, status %v, dis status %v, res:%v",
+		dp.partitionID, dp.raftStatus, dp.Status(), status, float64(dp.disk.Status), int(math.Min(float64(status), float64(dp.disk.Status))))
 	dp.partitionStatus = int(math.Min(float64(status), float64(dp.disk.Status)))
 }
 

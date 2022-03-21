@@ -500,12 +500,21 @@ func (m *Server) decommissionDataPartition(w http.ResponseWriter, r *http.Reques
 		sendErrReply(w, r, newErrHTTPReply(proto.ErrDataPartitionNotExists))
 		return
 	}
+	if dp.isSingleReplica() {
+		rstMsg = fmt.Sprintf(proto.AdminDecommissionDataPartition+" dataPartitionID :%v  is single replica on node:%v async running,need check later",
+			partitionID, addr)
+		go m.cluster.decommissionDataPartition(addr, dp, handleDataPartitionOfflineErr)
+		sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
+		return
+	}
 	if err = m.cluster.decommissionDataPartition(addr, dp, handleDataPartitionOfflineErr); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
-	rstMsg = fmt.Sprintf(proto.AdminDecommissionDataPartition+" dataPartitionID :%v  on node:%v successfully", partitionID, addr)
-	sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
+	if !dp.isSingleReplica() {
+		rstMsg = fmt.Sprintf(proto.AdminDecommissionDataPartition+" dataPartitionID :%v  on node:%v successfully", partitionID, addr)
+		sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
+	}
 }
 
 func (m *Server) diagnoseDataPartition(w http.ResponseWriter, r *http.Request) {
@@ -603,14 +612,19 @@ func (m *Server) updateVol(w http.ResponseWriter, r *http.Request) {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if replicaNum != 0 && !(replicaNum == 2 || replicaNum == 3) {
-		err = fmt.Errorf("replicaNum can only be 2 and 3,received replicaNum is[%v]", replicaNum)
+
+	if replicaNum != 0 && replicaNum != int(vol.dpReplicaNum) {
+		err = fmt.Errorf("replicaNum cann't be changed")
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
 
 	if followerRead, authenticate, err = parseBoolFieldToUpdateVol(r, vol); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	if vol.dpReplicaNum == 1 && !followerRead {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: "single replica must enable follower read"})
 		return
 	}
 
@@ -727,11 +741,11 @@ func (m *Server) createVol(w http.ResponseWriter, r *http.Request) {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if !(dpReplicaNum == 2 || dpReplicaNum == 3) {
-		err = fmt.Errorf("replicaNum can only be 2 and 3,received replicaNum is[%v]", dpReplicaNum)
-		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
-		return
-	}
+	//	if !(dpReplicaNum == 2 || dpReplicaNum == 3) {
+	//		err = fmt.Errorf("replicaNum can only be 2 and 3,received replicaNum is[%v]", dpReplicaNum)
+	//		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+	//		return
+	//	}
 	if vol, err = m.cluster.createVol(name, owner, zoneName, description,
 		mpCount, dpReplicaNum, size, capacity,
 		followerRead, authenticate, crossZone,
@@ -966,6 +980,32 @@ func (m *Server) migrateDataNodeHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	rstMsg := fmt.Sprintf("migrateDataNodeHandler from src [%v] to target[%v] has migrate successfully", srcAddr, targetAddr)
+	sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
+}
+
+// Decommission a data node. This will decommission all the data partition on that node.
+func (m *Server) cancelDecommissionDataNode(w http.ResponseWriter, r *http.Request) {
+	var (
+		node        *DataNode
+		rstMsg      string
+		offLineAddr string
+		err         error
+	)
+
+	if offLineAddr, err = parseAndExtractNodeAddr(r); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+
+	if node, err = m.cluster.dataNode(offLineAddr); err != nil {
+		sendErrReply(w, r, newErrHTTPReply(proto.ErrDataNodeNotExists))
+		return
+	}
+	if err = m.cluster.decommissionCancel(node); err != nil {
+		sendErrReply(w, r, newErrHTTPReply(err))
+		return
+	}
+	rstMsg = fmt.Sprintf("cancel decommission data node [%v] successfully", offLineAddr)
 	sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
 }
 
@@ -1247,7 +1287,6 @@ func (m *Server) buildNodeSetGrpInfo(index int) *proto.SimpleNodeSetGrpInfo {
 				Carry:              node.Carry,
 				DataPartitionCount: node.DataPartitionCount,
 				NodeSetID:          node.NodeSetID,
-				RdOnly:             node.RdOnly,
 			}
 			nsStat.DataNodes = append(nsStat.DataNodes, dataNodeInfo)
 			return true
@@ -2235,9 +2274,17 @@ func parseRequestToCreateVol(r *http.Request) (name, owner, zoneName, descriptio
 	if capacity, err = extractCapacity(r); err != nil {
 		return
 	}
-
-	if followerRead, err = extractFollowerRead(r); err != nil {
+	var isExist bool
+	if followerRead, isExist, err = extractFollowerRead(r); err != nil {
 		return
+	}
+
+	if isExist && !followerRead && dpReplicaNum == 1 {
+		err = fmt.Errorf("single replica must enable followerRead")
+		return
+	}
+	if dpReplicaNum == 1 {
+		followerRead = true
 	}
 
 	if authenticate, err = extractAuthenticate(r); err != nil {
@@ -2408,12 +2455,13 @@ func extractStatus(r *http.Request) (status bool, err error) {
 	return
 }
 
-func extractFollowerRead(r *http.Request) (followerRead bool, err error) {
+func extractFollowerRead(r *http.Request) (followerRead bool, exist bool, err error) {
 	var value string
 	if value = r.FormValue(followerReadKey); value == "" {
 		followerRead = false
 		return
 	}
+	exist = true
 	if followerRead, err = strconv.ParseBool(value); err != nil {
 		return
 	}

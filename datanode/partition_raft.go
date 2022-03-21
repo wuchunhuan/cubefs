@@ -287,7 +287,7 @@ func (dp *DataPartition) StartRaftAfterRepair() {
 				timer.Reset(5 * time.Second)
 				continue
 			}
-			log.LogInfof("PartitionID(%v) raft started.", dp.partitionID)
+			log.LogInfof("PartitionID(%v) raft started!", dp.partitionID)
 			return
 		case <-dp.stopC:
 			timer.Stop()
@@ -305,7 +305,7 @@ func (dp *DataPartition) addRaftNode(req *proto.AddDataPartitionRaftMemberReques
 	if heartbeatPort, replicaPort, err = dp.raftPort(); err != nil {
 		return
 	}
-
+	log.LogInfof("action[addRaftNode] add raft node peer [%v]", req.AddPeer)
 	found := false
 	for _, peer := range dp.config.Peers {
 		if peer.ID == req.AddPeer.ID {

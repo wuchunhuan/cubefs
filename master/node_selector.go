@@ -105,6 +105,9 @@ func getMetaNodeMaxTotal(metaNodes *sync.Map) (maxTotal uint64) {
 func getDataNodeMaxTotal(dataNodes *sync.Map) (maxTotal uint64) {
 	dataNodes.Range(func(key, value interface{}) bool {
 		dataNode := value.(*DataNode)
+		if dataNode.ToBeOffline == true {
+			return true
+		}
 		if dataNode.Total > maxTotal {
 			maxTotal = dataNode.Total
 		}
@@ -160,9 +163,8 @@ func getAvailCarryDataNodeTab(maxTotal uint64, excludeHosts []string, dataNodes 
 			log.LogDebugf("contains return")
 			return true
 		}
-
-		if !dataNode.isWriteAble() {
-			log.LogInfof("[getAvailCarryDataNodeTab] dataNode [%v] is not writeable", dataNode.Addr)
+		if !dataNode.isWriteAble() || !dataNode.ToBeOffline {
+			log.LogInfof("dataNode [%v] is not writeable", dataNode.Addr)
 			log.LogDebugf("isWritable return")
 			return true
 		}

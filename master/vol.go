@@ -78,9 +78,9 @@ func newVol(id uint64, name, owner, zoneName string,
 	createTime int64, description string) (vol *Vol) {
 	vol = &Vol{ID: id, Name: name, MetaPartitions: make(map[uint64]*MetaPartition, 0)}
 	vol.dataPartitions = newDataPartitionMap(name)
-	if dpReplicaNum < defaultReplicaNum {
-		dpReplicaNum = defaultReplicaNum
-	}
+	//	if dpReplicaNum < defaultReplicaNum {
+	//		dpReplicaNum = defaultReplicaNum
+	//	}
 	vol.dpReplicaNum = dpReplicaNum
 	vol.threshold = defaultMetaPartitionMemUsageThreshold
 	if mpReplicaNum < defaultReplicaNum {
@@ -274,7 +274,11 @@ func (vol *Vol) checkReplicaNum(c *Cluster) {
 			continue
 		}
 		if err = dp.removeOneReplicaByHost(c, host); err != nil {
-			log.LogErrorf("action[checkReplicaNum],vol[%v],err[%v]", vol.Name, err)
+			if dp.isSingleReplica() && len(dp.Hosts) > 1 {
+				log.LogWarnf("action[checkReplicaNum] removeOneReplicaByHost host [%v],vol[%v],err[%v]", host, vol.Name, err)
+				continue
+			}
+			log.LogErrorf("action[checkReplicaNum] removeOneReplicaByHost host [%v],vol[%v],err[%v]", host, vol.Name, err)
 			continue
 		}
 	}
@@ -390,19 +394,23 @@ func (vol *Vol) checkAutoDataPartitionCreation(c *Cluster) {
 		}
 	}()
 	if vol.status() == markDelete {
+		log.LogInfof("action[autoCreateDataPartitions] vol[%v] be set delete", vol.Name)
 		return
 	}
 	if vol.capacity() == 0 {
+		log.LogInfof("action[autoCreateDataPartitions] vol[%v] capacity zero", vol.Name)
 		return
 	}
 	usedSpace := vol.totalUsedSpace() / util.GB
 	if usedSpace >= vol.capacity() {
+		log.LogInfof("action[autoCreateDataPartitions] vol[%v] usedSpace [%v] large than capacity [%v]",
+			vol.Name, usedSpace, vol.capacity())
 		vol.setAllDataPartitionsToReadOnly()
 		return
 	}
 	vol.setStatus(normal)
-
-	if vol.status() == normal && !c.DisableAutoAllocate {
+	log.LogInfof("action[autoCreateDataPartitions] vol[%v] before autoCreateDataPartitions", vol.Name)
+	if !c.DisableAutoAllocate {
 		vol.autoCreateDataPartitions(c)
 	}
 }
@@ -410,10 +418,14 @@ func (vol *Vol) checkAutoDataPartitionCreation(c *Cluster) {
 func (vol *Vol) autoCreateDataPartitions(c *Cluster) {
 	if vol.dataPartitions.lastAutoCreateTime.IsZero() ||
 		vol.dataPartitions.lastAutoCreateTime.After(time.Now()) {
+		log.LogInfof("action[autoCreateDataPartitions] vol[%v] lastAutoCreateTime[%v], now [%v]",
+			vol.Name, vol.dataPartitions.lastAutoCreateTime, time.Now())
 		vol.dataPartitions.lastAutoCreateTime = time.Now()
 		return
 	}
 	if time.Since(vol.dataPartitions.lastAutoCreateTime) < time.Minute {
+		log.LogInfof("action[autoCreateDataPartitions] vol[%v] lastAutoCreateTime[%v], now [%v]",
+			vol.Name, vol.dataPartitions.lastAutoCreateTime, time.Now())
 		return
 	}
 

@@ -185,6 +185,8 @@ type DataPartitionInfo struct {
 	FileInCoreMap           map[string]*FileInCore
 	IsRecover               bool
 	FilesWithMissingReplica map[string]int64 // key: file name, value: last time when a missing replica is found
+	SingleDecommissionStatus uint8
+	SingleDecommissionAddr   string
 }
 
 //FileInCore define file in data partition

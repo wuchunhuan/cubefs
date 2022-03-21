@@ -75,6 +75,7 @@ const (
 	AddDataNode                    = "/dataNode/add"
 	DecommissionDataNode           = "/dataNode/decommission"
 	MigrateDataNode                = "/dataNode/migrate"
+	CancelDecommissionDataNode     = "/dataNode/cancelDecommission"
 	DecommissionDisk               = "/disk/decommission"
 	GetDataNode                    = "/dataNode/get"
 	AddMetaNode                    = "/metaNode/add"
