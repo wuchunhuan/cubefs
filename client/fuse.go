@@ -23,6 +23,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/cubefs/cubefs/util/auditlog"
 	syslog "log"
 	"net"
 	"net/http"
@@ -132,6 +133,18 @@ func main() {
 		daemonize.SignalOutcome(err)
 		os.Exit(1)
 	}
+
+	auditAddr, auditKey, _ := getAuditConfig(opt)
+	if auditAddr != "" && auditKey != "" {
+		_, err = auditlog.InitAudit(opt.Volname, auditAddr, auditKey)
+		if err != nil {
+			err = errors.NewErrorf("Init audit log fail: %v\n", err)
+			fmt.Println(err)
+			daemonize.SignalOutcome(err)
+			os.Exit(1)
+		}
+	}
+
 	defer log.LogFlush()
 
 	_, err = stat.NewStatistic(opt.Logpath, LoggerPrefix, int64(stat.DefaultStatLogSize),
@@ -334,6 +347,8 @@ func registerInterceptedSignal(mnt string) {
 	go func() {
 		sig := <-sigC
 		syslog.Printf("Killed due to a received signal (%v)\n", sig)
+		auditlog.StopAudit()
+		log.LogFlush()
 		os.Exit(1)
 	}()
 }
@@ -390,6 +405,8 @@ func parseMountOption(cfg *config.Config) (*proto.MountOptions, error) {
 	opt.EnablePosixACL = GlobalMountOptions[proto.EnablePosixACL].GetBool()
 	opt.EnableSummary = GlobalMountOptions[proto.EnableSummary].GetBool()
 	opt.MetaSendTimeout = GlobalMountOptions[proto.MetaSendTimeout].GetInt64()
+	opt.AuditAddr = GlobalMountOptions[proto.AuditAddr].GetString()
+	opt.Auditkey = GlobalMountOptions[proto.AuditKey].GetString()
 	opt.BuffersTotalLimit = GlobalMountOptions[proto.BuffersTotalLimit].GetInt64()
 
 	if opt.MountPoint == "" || opt.Volname == "" || opt.Owner == "" || opt.Master == "" {
@@ -400,6 +417,21 @@ func parseMountOption(cfg *config.Config) (*proto.MountOptions, error) {
 		return nil, errors.New(fmt.Sprintf("invalid fields, BuffersTotalLimit(%v) must larger or equal than 0", opt.BuffersTotalLimit))
 	}
 	return opt, nil
+}
+
+func getAuditConfig(opt *proto.MountOptions) (auditAddr, auditKey string, err error) {
+	if opt.AuditAddr == "" || opt.Auditkey == "" {
+		var mc = master.NewMasterClientFromString(opt.Master, false)
+		if cv, err := mc.AdminAPI().GetClusterInfo(); err != nil {
+			return "", "", err
+		} else {
+			opt.AuditAddr = cv.AuditAddr
+			opt.Auditkey = cv.AuditKey
+			return cv.AuditAddr, cv.AuditKey, nil
+		}
+	} else {
+		return opt.AuditAddr, opt.Auditkey, nil
+	}
 }
 
 func checkPermission(opt *proto.MountOptions) (err error) {

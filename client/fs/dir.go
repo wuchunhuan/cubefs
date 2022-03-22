@@ -17,6 +17,7 @@ package fs
 import "C"
 import (
 	"github.com/cubefs/cubefs/sdk/meta"
+	"github.com/cubefs/cubefs/util/log"
 	"github.com/cubefs/cubefs/util/stat"
 	"io"
 	"os"
@@ -31,7 +32,7 @@ import (
 
 	"github.com/cubefs/cubefs/proto"
 	"github.com/cubefs/cubefs/util/exporter"
-	"github.com/cubefs/cubefs/util/log"
+	"github.com/cubefs/cubefs/util/auditlog"
 )
 
 // used to locate the position in parent
@@ -83,10 +84,12 @@ func (dctx *DirContexts) Remove(handle fuse.HandleID) {
 
 // Dir defines the structure of a directory
 type Dir struct {
-	super  *Super
-	info   *proto.InodeInfo
-	dcache *DentryCache
-	dctx   *DirContexts
+	super     *Super
+	info      *proto.InodeInfo
+	dcache    *DentryCache
+	parentIno uint64
+	name      string
+	dctx      *DirContexts
 }
 
 // Functions that Dir needs to implement
@@ -110,12 +113,36 @@ var (
 )
 
 // NewDir returns a new directory.
-func NewDir(s *Super, i *proto.InodeInfo) fs.Node {
+func NewDir(s *Super, i *proto.InodeInfo, pino uint64, dirname string) fs.Node {
 	return &Dir{
-		super: s,
-		info:  i,
-		dctx:  NewDirContexts(),
+		super:     s,
+		info:      i,
+		parentIno: pino,
+		name:      dirname,
+		dctx:      NewDirContexts(),
 	}
+}
+
+func (d *Dir) getCwd() string {
+	dirpath := ""
+	curIno := d.info.Inode
+	for curIno != d.super.rootIno {
+		d.super.fslock.Lock()
+		node, ok := d.super.nodeCache[curIno]
+		d.super.fslock.Unlock()
+		if !ok {
+			log.LogErrorf("Get node cache failed: ino(%v)", curIno)
+			return "unknown" + dirpath
+		}
+		curDir, ok := node.(*Dir)
+		if !ok {
+			log.LogErrorf("Type error: Can not convert node -> *Dir, ino(%v)", curDir.parentIno)
+			return "unknown" + dirpath
+		}
+		dirpath = "/" + curDir.name + dirpath
+		curIno = curDir.parentIno
+	}
+	return dirpath
 }
 
 // Attr set the attributes of a directory.
@@ -148,10 +175,12 @@ func (d *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.Cr
 
 	bgTime := stat.BeginStat()
 	var err error
+	var newInode uint64
 	metric := exporter.NewTPCnt("filecreate")
 	defer func() {
 		stat.EndStat("Create", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
+		auditlog.AddEntry("Create", d.getCwd()+"/"+req.Name, "nil", err, time.Since(start).Microseconds(), newInode, 0)
 	}()
 
 	info, err := d.super.mw.Create_ll(d.info.Inode, req.Name, proto.Mode(req.Mode.Perm()), req.Uid, req.Gid, nil)
@@ -161,8 +190,10 @@ func (d *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.Cr
 	}
 
 	d.super.ic.Put(info)
-	child := NewFile(d.super, info, d.info.Inode)
+	child := NewFile(d.super, info, d.info.Inode, req.Name)
 	d.super.ec.OpenStream(info.Inode)
+
+	newInode = info.Inode
 
 	d.super.fslock.Lock()
 	d.super.nodeCache[info.Inode] = child
@@ -202,10 +233,12 @@ func (d *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, error
 
 	bgTime := stat.BeginStat()
 	var err error
+	var newInode uint64
 	metric := exporter.NewTPCnt("mkdir")
 	defer func() {
 		stat.EndStat("Mkdir", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
+		auditlog.AddEntry("Mkdir", d.getCwd()+"/"+req.Name, "nil", err, time.Since(start).Microseconds(), newInode, 0)
 	}()
 
 	info, err := d.super.mw.Create_ll(d.info.Inode, req.Name, proto.Mode(os.ModeDir|req.Mode.Perm()), req.Uid, req.Gid, nil)
@@ -215,8 +248,8 @@ func (d *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, error
 	}
 
 	d.super.ic.Put(info)
-	child := NewDir(d.super, info)
-
+	child := NewDir(d.super, info, d.info.Inode, req.Name)
+	newInode = info.Inode
 	d.super.fslock.Lock()
 	d.super.nodeCache[info.Inode] = child
 	d.super.fslock.Unlock()
@@ -235,16 +268,22 @@ func (d *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 
 	bgTime := stat.BeginStat()
 	var err error
+	var deletedInode uint64
 	metric := exporter.NewTPCnt("remove")
 	defer func() {
 		stat.EndStat("Remove", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
+		auditlog.AddEntry("Remove", d.getCwd()+"/"+req.Name, "nil", err, time.Since(start).Microseconds(), deletedInode, 0)
 	}()
 
 	info, err := d.super.mw.Delete_ll(d.info.Inode, req.Name, req.Dir)
 	if err != nil {
 		log.LogErrorf("Remove: parent(%v) name(%v) err(%v)", d.info.Inode, req.Name, err)
 		return ParseError(err)
+	}
+
+	if info != nil {
+		deletedInode = info.Inode
 	}
 
 	d.super.ic.Delete(d.info.Inode)
@@ -292,7 +331,7 @@ func (d *Dir) Lookup(ctx context.Context, req *fuse.LookupRequest, resp *fuse.Lo
 	if err != nil {
 		log.LogErrorf("Lookup: parent(%v) name(%v) ino(%v) err(%v)", d.info.Inode, req.Name, ino, err)
 		dummyInodeInfo := &proto.InodeInfo{Inode: ino}
-		dummyChild := NewFile(d.super, dummyInodeInfo, d.info.Inode)
+		dummyChild := NewFile(d.super, dummyInodeInfo, d.info.Inode, req.Name)
 		return dummyChild, nil
 	}
 	mode := proto.OsMode(info.Mode)
@@ -301,9 +340,9 @@ func (d *Dir) Lookup(ctx context.Context, req *fuse.LookupRequest, resp *fuse.Lo
 	child, ok := d.super.nodeCache[ino]
 	if !ok {
 		if mode.IsDir() {
-			child = NewDir(d.super, info)
+			child = NewDir(d.super, info, d.info.Inode, req.Name)
 		} else {
-			child = NewFile(d.super, info, d.info.Inode)
+			child = NewFile(d.super, info, d.info.Inode, req.Name)
 		}
 		d.super.nodeCache[ino] = child
 	}
@@ -434,6 +473,7 @@ func (d *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Nod
 	defer func() {
 		stat.EndStat("Rename", err, bgTime, 1)
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: d.super.volname})
+		auditlog.AddEntry("Rename", d.getCwd()+"/"+req.OldName, dstDir.getCwd()+"/"+req.NewName, err, time.Since(start).Microseconds(), 0, 0)
 	}()
 
 	err = d.super.mw.Rename_ll(d.info.Inode, req.OldName, dstDir.info.Inode, req.NewName)
@@ -504,7 +544,7 @@ func (d *Dir) Mknod(ctx context.Context, req *fuse.MknodRequest) (fs.Node, error
 	}
 
 	d.super.ic.Put(info)
-	child := NewFile(d.super, info, d.info.Inode)
+	child := NewFile(d.super, info, d.info.Inode, req.Name)
 
 	d.super.fslock.Lock()
 	d.super.nodeCache[info.Inode] = child
@@ -535,7 +575,7 @@ func (d *Dir) Symlink(ctx context.Context, req *fuse.SymlinkRequest) (fs.Node, e
 	}
 
 	d.super.ic.Put(info)
-	child := NewFile(d.super, info, d.info.Inode)
+	child := NewFile(d.super, info, d.info.Inode, req.NewName)
 
 	d.super.fslock.Lock()
 	d.super.nodeCache[info.Inode] = child
@@ -582,7 +622,7 @@ func (d *Dir) Link(ctx context.Context, req *fuse.LinkRequest, old fs.Node) (fs.
 	d.super.fslock.Lock()
 	newFile, ok := d.super.nodeCache[info.Inode]
 	if !ok {
-		newFile = NewFile(d.super, info, d.info.Inode)
+		newFile = NewFile(d.super, info, d.info.Inode, req.NewName)
 		d.super.nodeCache[info.Inode] = newFile
 	}
 	d.super.fslock.Unlock()

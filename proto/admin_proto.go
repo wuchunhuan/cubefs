@@ -145,6 +145,8 @@ type ClusterInfo struct {
 	MetaNodeDeleteWorkerSleepMs uint64
 	DataNodeDeleteLimitRate     uint64
 	DataNodeAutoRepairLimitRate uint64
+	AuditAddr                   string
+	AuditKey                    string
 }
 
 // CreateDataPartitionRequest defines the request to create a data partition.

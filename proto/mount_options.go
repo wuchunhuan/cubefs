@@ -50,6 +50,8 @@ const (
 
 	EnableSummary
 	MetaSendTimeout
+	AuditAddr
+	AuditKey
 	BuffersTotalLimit
 
 	MaxMountOption
@@ -118,6 +120,8 @@ func InitMountOptions(opts []MountOption) {
 	opts[EnablePosixACL] = MountOption{"enablePosixACL", "enable posix ACL support", "", false}
 	opts[EnableSummary] = MountOption{"enableSummary", "enable content summary", "", false}
 	opts[MetaSendTimeout] = MountOption{"metaSendTimeout", "Meta send timeout", "", int64(600)}
+	opts[AuditAddr] = MountOption{"auditAddr", "Audit log addr", "", ""}
+	opts[AuditKey] = MountOption{"auditKey", "Audit appkey", "", ""}
 	opts[BuffersTotalLimit] = MountOption{"buffersTotalLimit", "Send/Receive packets memory limit", "", int64(32768)} //default 4G
 
 	for i := 0; i < MaxMountOption; i++ {
@@ -250,5 +254,7 @@ type MountOptions struct {
 	EnablePosixACL    bool
 	EnableSummary     bool
 	MetaSendTimeout   int64
+	AuditAddr         string
+	Auditkey          string
 	BuffersTotalLimit int64
 }

@@ -60,6 +60,7 @@ import "C"
 
 import (
 	masterSDK "github.com/cubefs/cubefs/sdk/master"
+	"github.com/cubefs/cubefs/util/auditlog"
 	"github.com/cubefs/cubefs/util/errors"
 	"github.com/cubefs/cubefs/util/stat"
 	"io"
@@ -71,6 +72,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/willf/bitset"
@@ -186,6 +188,8 @@ type client struct {
 	secretKey     string
 	accessKey     string
 	subDir        string
+	auditAddr     string
+	auditKey      string
 
 	// runtime context
 	cwd    string // current working directory
@@ -242,6 +246,10 @@ func cfs_set_client(id C.int64_t, key, val *C.char) C.int {
 		c.accessKey = v
 	case "secretKey":
 		c.secretKey = v
+	case "auditAddr":
+		c.auditAddr = v
+	case "auditKey":
+		c.auditKey = v
 	default:
 		return statusEINVAL
 	}
@@ -279,6 +287,7 @@ func cfs_close_client(id C.int64_t) {
 		}
 		removeClient(int64(id))
 	}
+	auditlog.StopAudit()
 	log.LogFlush()
 }
 
@@ -388,6 +397,7 @@ func cfs_open(id C.int64_t, path *C.char, flags C.int, mode C.mode_t) C.int {
 	if !exist {
 		return statusEINVAL
 	}
+	start := time.Now()
 
 	fuseMode := uint32(mode) & uint32(0777)
 	fuseFlags := uint32(flags) &^ uint32(0x8000)
@@ -412,6 +422,13 @@ func cfs_open(id C.int64_t, path *C.char, flags C.int, mode C.mode_t) C.int {
 			return errorToStatus(err)
 		}
 		parentIno = dirInfo.Inode
+		defer func() {
+			if info != nil {
+				auditlog.AddEntry("Create", dirpath, "nil", err, time.Since(start).Microseconds(), info.Inode, 0)
+			} else {
+				auditlog.AddEntry("Create", dirpath, "nil", err, time.Since(start).Microseconds(), 0, 0)
+			}
+		}()
 		newInfo, err := c.create(dirInfo.Inode, name, fuseMode)
 		if err != nil {
 			if err != syscall.EEXIST {
@@ -768,10 +785,21 @@ func cfs_mkdirs(id C.int64_t, path *C.char, mode C.mode_t) C.int {
 		return statusEINVAL
 	}
 
+	start := time.Now()
+	var gerr error
+	var gino uint64
+
 	dirpath := c.absPath(C.GoString(path))
 	if dirpath == "/" {
 		return statusEEXIST
 	}
+	defer func() {
+		if gerr == nil {
+			auditlog.AddEntry("Mkdir", dirpath, "nil", gerr, time.Since(start).Microseconds(), gino, 0)
+		} else {
+			auditlog.AddEntry("Mkdir", dirpath, "nil", gerr, time.Since(start).Microseconds(), 0, 0)
+		}
+	}()
 
 	pino := proto.RootIno
 	dirs := strings.Split(dirpath, "/")
@@ -786,16 +814,19 @@ func cfs_mkdirs(id C.int64_t, path *C.char, mode C.mode_t) C.int {
 
 				if err != nil {
 					if err != syscall.EEXIST {
+						gerr = err
 						return errorToStatus(err)
 					}
 				} else {
 					child = info.Inode
 				}
 			} else {
+				gerr = err
 				return errorToStatus(err)
 			}
 		}
 		pino = child
+		gino = child
 	}
 
 	return 0
@@ -807,15 +838,25 @@ func cfs_rmdir(id C.int64_t, path *C.char) C.int {
 	if !exist {
 		return statusEINVAL
 	}
+	start := time.Now()
+	var err error
+	var info *proto.InodeInfo
 
 	absPath := c.absPath(C.GoString(path))
+	defer func() {
+		if info == nil {
+			auditlog.AddEntry("Rmdir", absPath, "nil", err, time.Since(start).Microseconds(), 0, 0)
+		} else {
+			auditlog.AddEntry("Rmdir", absPath, "nil", err, time.Since(start).Microseconds(), info.Inode, 0)
+		}
+	}()
 	dirpath, name := gopath.Split(absPath)
 	dirInfo, err := c.lookupPath(dirpath)
 	if err != nil {
 		return errorToStatus(err)
 	}
 
-	_, err = c.mw.Delete_ll(dirInfo.Inode, name, true)
+	info, err = c.mw.Delete_ll(dirInfo.Inode, name, true)
 	c.ic.Delete(dirInfo.Inode)
 	c.dc.Delete(absPath)
 	return errorToStatus(err)
@@ -828,8 +869,21 @@ func cfs_unlink(id C.int64_t, path *C.char) C.int {
 		return statusEINVAL
 	}
 
+	start := time.Now()
+	var err error
+	var info *proto.InodeInfo
+
 	absPath := c.absPath(C.GoString(path))
 	dirpath, name := gopath.Split(absPath)
+
+	defer func() {
+		if info == nil {
+			auditlog.AddEntry("Unlink", absPath, "nil", err, time.Since(start).Microseconds(), 0, 0)
+		} else {
+			auditlog.AddEntry("Unlink", absPath, "nil", err, time.Since(start).Microseconds(), info.Inode, 0)
+		}
+	}()
+
 	dirInfo, err := c.lookupPath(dirpath)
 	if err != nil {
 		return errorToStatus(err)
@@ -843,7 +897,7 @@ func cfs_unlink(id C.int64_t, path *C.char) C.int {
 		return statusEISDIR
 	}
 
-	info, err := c.mw.Delete_ll(dirInfo.Inode, name, false)
+	info, err = c.mw.Delete_ll(dirInfo.Inode, name, false)
 	if err != nil {
 		return errorToStatus(err)
 	}
@@ -862,8 +916,17 @@ func cfs_rename(id C.int64_t, from *C.char, to *C.char) C.int {
 		return statusEINVAL
 	}
 
+	start := time.Now()
+	var err error
+
 	absFrom := c.absPath(C.GoString(from))
 	absTo := c.absPath(C.GoString(to))
+
+	defer func() {
+		// todo: It's not able to get srcInode & dstInode there.
+		auditlog.AddEntry("Rename", absFrom, absTo, err, time.Since(start).Microseconds(), 0, 0)
+	}()
+
 	srcDirPath, srcName := gopath.Split(absFrom)
 	dstDirPath, dstName := gopath.Split(absTo)
 
@@ -918,6 +981,21 @@ func (c *client) absPath(path string) string {
 	return gopath.Clean(p)
 }
 
+func (c *client) getAuditConfig() (auditAddr, auditKey string, err error) {
+	if c.auditAddr == "" || c.auditKey == "" {
+		var mc = masterSDK.NewMasterClientFromString(c.masterAddr, false)
+		if cv, err := mc.AdminAPI().GetClusterInfo(); err != nil {
+			return "", "", err
+		} else {
+			c.auditAddr = cv.AuditAddr
+			c.auditKey = cv.AuditKey
+			return cv.AuditAddr, cv.AuditKey, nil
+		}
+	} else {
+		return c.auditAddr, c.auditKey, nil
+	}
+}
+
 func (c *client) start() (err error) {
 	var masters = strings.Split(c.masterAddr, ",")
 
@@ -928,6 +1006,14 @@ func (c *client) start() (err error) {
 		level := parseLogLevel(c.logLevel)
 		log.InitLog(c.logDir, "libcfs", level, nil)
 		stat.NewStatistic(c.logDir, "libcfs", int64(stat.DefaultStatLogSize), stat.DefaultTimeOutUs, true)
+	}
+
+	auditAddr, auditKey, _ := c.getAuditConfig()
+	if auditAddr != "" && auditKey != "" {
+		_, err = auditlog.InitAudit(c.volName, c.auditAddr, c.auditKey)
+		if err != nil {
+			log.LogWarnf("Init audit log fail: %v", err)
+		}
 	}
 
 	if c.enableSummary {

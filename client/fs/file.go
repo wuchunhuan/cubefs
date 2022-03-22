@@ -37,6 +37,7 @@ type File struct {
 	super     *Super
 	info      *proto.InodeInfo
 	parentIno uint64
+	name      string
 	sync.RWMutex
 }
 
@@ -60,8 +61,34 @@ var (
 )
 
 // NewFile returns a new file.
-func NewFile(s *Super, i *proto.InodeInfo, parentIno uint64) fs.Node {
-	return &File{super: s, info: i, parentIno: parentIno}
+func NewFile(s *Super, i *proto.InodeInfo, pino uint64, filename string) fs.Node {
+	return &File{
+		super:     s,
+		info:      i,
+		parentIno: pino,
+		name:      filename,
+	}
+}
+
+func (f *File) getCwd() string {
+	filepath := "/" + f.name
+	if f.parentIno == f.super.rootIno {
+		return filepath
+	}
+
+	f.super.fslock.Lock()
+	node, ok := f.super.nodeCache[f.parentIno]
+	f.super.fslock.Unlock()
+	if !ok {
+		log.LogErrorf("Get node cache failed: ino(%v)", f.parentIno)
+		return "unknown" + filepath
+	}
+	parentDir, ok := node.(*Dir)
+	if !ok {
+		log.LogErrorf("Type error: Can not convert node -> *Dir, ino(%v)", f.parentIno)
+		return "unknown" + filepath
+	}
+	return parentDir.getCwd() + filepath
 }
 
 // Attr sets the attributes of a file.

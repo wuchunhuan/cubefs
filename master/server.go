@@ -49,6 +49,8 @@ const (
 	cfgTickInterval   = "tickInterval"
 	cfgElectionTick   = "electionTick"
 	SecretKey         = "masterServiceKey"
+	AuditAddrKey      = "auditAddr"
+	AuditAppKey       = "auditKey"
 )
 
 var (
@@ -79,6 +81,8 @@ type Server struct {
 	walDir       string
 	storeDir     string
 	retainLogs   uint64
+	auditAddr    string
+	auditKey     string
 	tickInterval int
 	electionTick int
 	leaderInfo   *LeaderInfo
@@ -153,6 +157,10 @@ func (m *Server) Sync() {
 }
 
 func (m *Server) checkConfig(cfg *config.Config) (err error) {
+
+	m.auditAddr = cfg.GetString(AuditAddrKey)
+	m.auditKey = cfg.GetString(AuditAppKey)
+
 	m.clusterName = cfg.GetString(ClusterName)
 	m.ip = cfg.GetString(IP)
 	m.port = cfg.GetString(proto.ListenPort)

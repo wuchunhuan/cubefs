@@ -144,7 +144,7 @@ func (s *Super) Root() (fs.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	root := NewDir(s, inode)
+	root := NewDir(s, inode, inode.Inode, "")
 	return root, nil
 }
 
