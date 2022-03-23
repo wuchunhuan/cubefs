@@ -269,7 +269,7 @@ func (vol *Vol) checkReplicaNum(c *Cluster) {
 	var err error
 	dps := vol.cloneDataPartitionMap()
 	for _, dp := range dps {
-		host := dp.getToBeDecommissionHost(int(vol.dpReplicaNum))
+		host := dp.getToBeDecommissionHost(int(dp.ReplicaNum))
 		if host == "" {
 			continue
 		}

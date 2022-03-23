@@ -625,18 +625,12 @@ func (m *Server) updateVol(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if replicaNum != 0 && replicaNum != int(vol.dpReplicaNum) {
-		err = fmt.Errorf("replicaNum cann't be changed")
-		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
-		return
-	}
-
 	if followerRead, authenticate, err = parseBoolFieldToUpdateVol(r, vol); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if vol.dpReplicaNum == 1 && !followerRead {
-		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: "single replica must enable follower read"})
+	if (replicaNum == 1 || replicaNum == 2) && !followerRead {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: "single or two replica must enable follower read"})
 		return
 	}
 
@@ -649,6 +643,7 @@ func (m *Server) updateVol(w http.ResponseWriter, r *http.Request) {
 	newArgs.authenticate = authenticate
 	newArgs.dpSelectorName = dpSelectorName
 	newArgs.dpSelectorParm = dpSelectorParm
+	newArgs.dpReplicaNum = uint8(replicaNum)
 
 	if err = m.cluster.updateVol(name, authKey, newArgs); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
@@ -753,11 +748,11 @@ func (m *Server) createVol(w http.ResponseWriter, r *http.Request) {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	//	if !(dpReplicaNum == 2 || dpReplicaNum == 3) {
-	//		err = fmt.Errorf("replicaNum can only be 2 and 3,received replicaNum is[%v]", dpReplicaNum)
-	//		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
-	//		return
-	//	}
+	if (dpReplicaNum == 1 || dpReplicaNum == 2) && !followerRead{
+		err = fmt.Errorf("replicaNum be 2 and 3,followerRead must set true")
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
 	if vol, err = m.cluster.createVol(name, owner, zoneName, description,
 		mpCount, dpReplicaNum, size, capacity,
 		followerRead, authenticate, crossZone,
