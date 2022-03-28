@@ -98,6 +98,7 @@ type dataPartitionValue struct {
 	OfflinePeerID uint64
 	Replicas      []*replicaValue
 	IsRecover     bool
+	RdOnly        bool
 }
 
 type replicaValue struct {
@@ -117,6 +118,7 @@ func newDataPartitionValue(dp *DataPartition) (dpv *dataPartitionValue) {
 		OfflinePeerID: dp.OfflinePeerID,
 		Replicas:      make([]*replicaValue, 0),
 		IsRecover:     dp.isRecover,
+		RdOnly:		   dp.RdOnly,
 	}
 	for _, replica := range dp.Replicas {
 		rv := &replicaValue{Addr: replica.Addr, DiskPath: replica.DiskPath}
@@ -885,11 +887,14 @@ func (c *Cluster) loadDataPartitions() (err error) {
 				dpv.Peers[i].ID = dn.(*DataNode).ID
 			}
 		}
+
 		dp := newDataPartition(dpv.PartitionID, dpv.ReplicaNum, dpv.VolName, dpv.VolID)
 		dp.Hosts = strings.Split(dpv.Hosts, underlineSeparator)
 		dp.Peers = dpv.Peers
 		dp.OfflinePeerID = dpv.OfflinePeerID
 		dp.isRecover = dpv.IsRecover
+		dp.RdOnly = dpv.RdOnly
+
 		for _, rv := range dpv.Replicas {
 			if !contains(dp.Hosts, rv.Addr) {
 				continue

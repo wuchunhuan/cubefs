@@ -54,6 +54,7 @@ type DataPartition struct {
 	SingleDecommissionStatus uint8
 	singleDecommissionChan   chan bool
 	SingleDecommissionAddr   string
+	RdOnly					 bool
 }
 
 func newDataPartition(ID uint64, replicaNum uint8, volName string, volID uint64) (partition *DataPartition) {
@@ -608,7 +609,7 @@ func (partition *DataPartition) updateMetric(vr *proto.PartitionReport, dataNode
 	}
 	partition.checkAndRemoveMissReplica(dataNode.Addr)
 
-	if replica.Status == proto.ReadWrite && replica.dataNode.RdOnly {
+	if replica.Status == proto.ReadWrite && (partition.RdOnly || replica.dataNode.RdOnly) {
 		replica.Status = int8(proto.ReadOnly)
 	}
 }

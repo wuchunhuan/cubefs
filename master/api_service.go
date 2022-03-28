@@ -1173,6 +1173,20 @@ func (m *Server) updateNodesetId(zoneName string, destNodesetId uint64, nodeType
 	return
 }
 
+func (m *Server) setDpRdOnly(partitionID uint64,  rdOnly bool) (err error) {
+
+	var dp *DataPartition
+	if dp, err = m.cluster.getDataPartitionByID(partitionID); err != nil {
+		return fmt.Errorf("[setPartitionRdOnly] getDataPartitionByID err(%s)", err.Error())
+	}
+	dp.RLock()
+	dp.RdOnly = rdOnly
+	m.cluster.syncUpdateDataPartition(dp)
+	dp.RUnlock()
+
+	return
+}
+
 func (m *Server) setNodeRdOnly(addr string, nodeType uint32, rdOnly bool) (err error) {
 	if nodeType == TypeDataPartion {
 		value, ok := m.cluster.dataNodes.Load(addr)
@@ -1364,6 +1378,31 @@ func parseSetNodeRdOnlyParam(r *http.Request) (addr string, nodeType int, rdOnly
 	return
 }
 
+func parseSetDpRdOnlyParam(r *http.Request) (dpId uint64, rdOnly bool, err error) {
+	if err = r.ParseForm(); err != nil {
+		return
+	}
+
+	if dpId, err = extractDataPartitionID(r); err != nil {
+		err = fmt.Errorf("parseSetDpRdOnlyParam get dpid error %v", err)
+		return
+	}
+
+
+	val := r.FormValue(rdOnlyKey)
+	if val == "" {
+		err = fmt.Errorf("parseSetDpRdOnlyParam %s is empty", rdOnlyKey)
+		return
+	}
+
+	if rdOnly, err = strconv.ParseBool(val); err != nil {
+		err = fmt.Errorf("parseSetDpRdOnlyParam %s is not bool value %s", rdOnlyKey, val)
+		return
+	}
+
+	return
+}
+
 func parseNodeType(r *http.Request) (nodeType int, err error) {
 	var val string
 	if val = r.FormValue(nodeTypeKey); val == "" {
@@ -1404,6 +1443,28 @@ func (m *Server) setNodeRdOnlyHandler(w http.ResponseWriter, r *http.Request) {
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("[setNodeRdOnlyHandler] set node %s to rdOnly(%v) success", addr, rdOnly)))
 	return
 }
+
+func (m *Server) setDpRdOnlyHandler(w http.ResponseWriter, r *http.Request) {
+
+	dpId, rdOnly, err := parseSetDpRdOnlyParam(r)
+	if err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+
+	log.LogInfof("[setNodeRdOnlyHandler] set dp %v to rdOnly(%v)", dpId, rdOnly)
+
+	err = m.setDpRdOnly(dpId, rdOnly)
+	if err != nil {
+		log.LogErrorf("[setNodeRdOnlyHandler] set dp %v to rdOnly %v, err (%s)", dpId, rdOnly, err.Error())
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+
+	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("[setNodeRdOnlyHandler] set dpid %v to rdOnly(%v) success", dpId, rdOnly)))
+	return
+}
+
 
 func (m *Server) updateNodeSetCapacityHandler(w http.ResponseWriter, r *http.Request) {
 	cnt, id, zoneName, err := parseSetNodeSetCapParams(r)

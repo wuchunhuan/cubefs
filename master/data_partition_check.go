@@ -122,7 +122,7 @@ func (partition *DataPartition) checkReplicaStatus(timeOutSec int64) {
 			continue
 		}
 
-		if replica.dataNode.RdOnly && replica.Status == proto.ReadWrite {
+		if (replica.dataNode.RdOnly || partition.RdOnly) && replica.Status == proto.ReadWrite {
 			replica.Status = proto.ReadOnly
 		}
 	}
