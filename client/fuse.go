@@ -321,6 +321,7 @@ func mount(opt *proto.MountOptions) (fsConn *fuse.Conn, super *cfs.Super, err er
 
 	if opt.EnablePosixACL {
 		options = append(options, fuse.PosixACL())
+		options = append(options, fuse.DefaultPermissions())
 	}
 
 	fsConn, err = fuse.Mount(opt.MountPoint, options...)
