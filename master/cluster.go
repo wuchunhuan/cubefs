@@ -16,10 +16,11 @@ package master
 
 import (
 	"fmt"
-	"github.com/cubefs/cubefs/datanode"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/cubefs/cubefs/datanode"
 
 	"github.com/cubefs/cubefs/proto"
 	"github.com/cubefs/cubefs/raftstore"
@@ -1184,7 +1185,6 @@ func (c *Cluster) decommissionCancel(dataNode *DataNode) (err error) {
 	}
 	return
 }
-
 
 func (c *Cluster) migrateDataNode(srcAddr, targetAddr string, limit int) (err error) {
 	var toBeOffLinePartitions []*DataPartition
@@ -2468,6 +2468,20 @@ func (c *Cluster) setMetaNodeDeleteWorkerSleepMs(val uint64) (err error) {
 	if err = c.syncPutCluster(); err != nil {
 		log.LogErrorf("action[setMetaNodeDeleteWorkerSleepMs] err[%v]", err)
 		atomic.StoreUint64(&c.cfg.MetaNodeDeleteWorkerSleepMs, oldVal)
+		err = proto.ErrPersistenceByRaft
+		return
+	}
+	return
+}
+
+func (c *Cluster) setMaxDpCntLimit(val uint64) (err error) {
+	oldVal := atomic.LoadUint64(&c.cfg.MaxDpCntLimit)
+	atomic.StoreUint64(&c.cfg.MaxDpCntLimit, val)
+	maxDpCntOneNode = uint32(val)
+	if err = c.syncPutCluster(); err != nil {
+		log.LogErrorf("action[MaxDpCntLimit] err[%v]", err)
+		atomic.StoreUint64(&c.cfg.MaxDpCntLimit, oldVal)
+		maxDpCntOneNode = uint32(oldVal)
 		err = proto.ErrPersistenceByRaft
 		return
 	}

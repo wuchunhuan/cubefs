@@ -419,7 +419,7 @@ func (m *Server) deleteDataReplica(w http.ResponseWriter, r *http.Request) {
 		force, _ = strconv.ParseBool(value)
 		if force && dp.ReplicaNum != 2 {
 			msg = fmt.Sprintf("failed! replicaNum [%v] and force should be used in two replcias datapartition", dp.ReplicaNum)
-			sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: msg })
+			sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: msg})
 			return
 		}
 	}
@@ -748,7 +748,7 @@ func (m *Server) createVol(w http.ResponseWriter, r *http.Request) {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if (dpReplicaNum == 1 || dpReplicaNum == 2) && !followerRead{
+	if (dpReplicaNum == 1 || dpReplicaNum == 2) && !followerRead {
 		err = fmt.Errorf("replicaNum be 2 and 3,followerRead must set true")
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
@@ -1060,6 +1060,15 @@ func (m *Server) setNodeInfoHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	if val, ok := params[maxDpCntLimitKey]; ok {
+		if v, ok := val.(uint64); ok {
+			if err = m.cluster.setMaxDpCntLimit(v); err != nil {
+				sendErrReply(w, r, newErrHTTPReply(err))
+				return
+			}
+		}
+	}
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("set nodeinfo params %v successfully", params)))
 
 }
@@ -1173,7 +1182,7 @@ func (m *Server) updateNodesetId(zoneName string, destNodesetId uint64, nodeType
 	return
 }
 
-func (m *Server) setDpRdOnly(partitionID uint64,  rdOnly bool) (err error) {
+func (m *Server) setDpRdOnly(partitionID uint64, rdOnly bool) (err error) {
 
 	var dp *DataPartition
 	if dp, err = m.cluster.getDataPartitionByID(partitionID); err != nil {
@@ -1388,7 +1397,6 @@ func parseSetDpRdOnlyParam(r *http.Request) (dpId uint64, rdOnly bool, err error
 		return
 	}
 
-
 	val := r.FormValue(rdOnlyKey)
 	if val == "" {
 		err = fmt.Errorf("parseSetDpRdOnlyParam %s is empty", rdOnlyKey)
@@ -1464,7 +1472,6 @@ func (m *Server) setDpRdOnlyHandler(w http.ResponseWriter, r *http.Request) {
 	sendOkReply(w, r, newSuccessHTTPReply(fmt.Sprintf("[setNodeRdOnlyHandler] set dpid %v to rdOnly(%v) success", dpId, rdOnly)))
 	return
 }
-
 
 func (m *Server) updateNodeSetCapacityHandler(w http.ResponseWriter, r *http.Request) {
 	cnt, id, zoneName, err := parseSetNodeSetCapParams(r)
@@ -1633,6 +1640,7 @@ func (m *Server) getNodeInfoHandler(w http.ResponseWriter, r *http.Request) {
 	resp[nodeMarkDeleteRateKey] = fmt.Sprintf("%v", m.cluster.cfg.DataNodeDeleteLimitRate)
 	resp[nodeDeleteWorkerSleepMs] = fmt.Sprintf("%v", m.cluster.cfg.MetaNodeDeleteWorkerSleepMs)
 	resp[nodeAutoRepairRateKey] = fmt.Sprintf("%v", m.cluster.cfg.DataNodeAutoRepairLimitRate)
+	resp[maxDpCntLimitKey] = fmt.Sprintf("%v", m.cluster.cfg.MaxDpCntLimit)
 
 	sendOkReply(w, r, newSuccessHTTPReply(resp))
 }
@@ -2656,6 +2664,18 @@ func parseAndExtractSetNodeInfoParams(r *http.Request) (params map[string]interf
 		}
 		params[nodeDeleteWorkerSleepMs] = val
 	}
+
+	if value = r.FormValue(maxDpCntLimitKey); value != "" {
+		noParams = false
+		var val = uint64(0)
+		val, err = strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			err = unmatchedKey(maxDpCntLimitKey)
+			return
+		}
+		params[maxDpCntLimitKey] = val
+	}
+
 	if noParams {
 		err = keyNotFound(nodeDeleteBatchCountKey)
 		return

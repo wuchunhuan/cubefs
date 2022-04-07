@@ -58,7 +58,17 @@ var (
 
 	useConnPool = true //for test
 	gConfig     *clusterConfig
+
+	maxDpCntOneNode = uint32(3000)
 )
+
+func dpCntOneNodeLimit() uint32 {
+	if maxDpCntOneNode <= 0 {
+		return 3000
+	}
+
+	return maxDpCntOneNode
+}
 
 // Server represents the server in a cluster
 type Server struct {
