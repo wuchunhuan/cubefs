@@ -199,8 +199,8 @@ func (w *Wrapper) updateDataPartitionByRsp(isInit bool, DataPartitions []*proto.
 		}
 		log.LogInfof("updateDataPartition: dp(%v)", dp)
 		w.replaceOrInsertPartition(dp)
+		dp.MetricsRefresh()
 		if dp.Status == proto.ReadWrite {
-			dp.MetricsRefresh()
 			rwPartitionGroups = append(rwPartitionGroups, dp)
 		}
 	}

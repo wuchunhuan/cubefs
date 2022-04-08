@@ -23,6 +23,7 @@ import (
 	"github.com/cubefs/cubefs/util/log"
 	"hash/crc32"
 	"net"
+	"time"
 )
 
 // ExtentReader defines the struct of the extent reader.
@@ -55,6 +56,7 @@ func (reader *ExtentReader) Read(req *ExtentRequest) (readBytes int, err error) 
 	size := req.Size
 
 	reqPacket := NewReadPacket(reader.key, offset, size, reader.inode, req.FileOffset, reader.followerRead)
+	reqPacket.StartT = time.Now().UnixNano()
 	sc := NewStreamConn(reader.dp, reader.followerRead)
 
 	log.LogDebugf("ExtentReader Read enter: size(%v) req(%v) reqPacket(%v)", size, req, reqPacket)
@@ -84,6 +86,9 @@ func (reader *ExtentReader) Read(req *ExtentRequest) (readBytes int, err error) 
 				// check if it is NotLeaderErr.
 				return e, false
 			}
+
+			reader.dp.RecordRead(reqPacket.StartT)
+			reqPacket.StartT = time.Now().UnixNano()
 
 			readBytes += int(replyPacket.Size)
 		}

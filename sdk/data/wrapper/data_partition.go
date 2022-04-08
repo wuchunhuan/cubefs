@@ -16,6 +16,7 @@ package wrapper
 
 import (
 	"fmt"
+	"github.com/cubefs/cubefs/util/exporter"
 	"net"
 	"strings"
 	"sync"
@@ -49,6 +50,22 @@ type DataPartitionMetrics struct {
 	WriteOpNum          int64
 }
 
+func (dp *DataPartition) RecordRead(startT int64) {
+	if startT == 0 {
+		log.LogWarnf("RecordRead: invalid start time")
+		return
+	}
+	cost := time.Now().UnixNano() - startT
+
+	dp.Metrics.Lock()
+	defer dp.Metrics.Unlock()
+
+	dp.Metrics.ReadOpNum++
+	dp.Metrics.SumReadLatencyNano += cost
+
+	return
+}
+
 func (dp *DataPartition) RecordWrite(startT int64) {
 	if startT == 0 {
 		log.LogWarnf("RecordWrite: invalid start time")
@@ -74,12 +91,16 @@ func (dp *DataPartition) MetricsRefresh() {
 	} else {
 		dp.Metrics.AvgReadLatencyNano = 0
 	}
+	readMetrics := exporter.NewGauge("ReadLatencyPacket")
+	readMetrics.SetWithLabels(float64(dp.Metrics.AvgReadLatencyNano / 1e6), map[string]string{exporter.Vol : dp.ClientWrapper.volName})
 
 	if dp.Metrics.WriteOpNum != 0 {
 		dp.Metrics.AvgWriteLatencyNano = dp.Metrics.SumWriteLatencyNano / dp.Metrics.WriteOpNum
 	} else {
 		dp.Metrics.AvgWriteLatencyNano = 0
 	}
+	writeMetrics := exporter.NewGauge("WriteLatencyPacket")
+	writeMetrics.SetWithLabels(float64(dp.Metrics.AvgWriteLatencyNano / 1e6), map[string]string{exporter.Vol : dp.ClientWrapper.volName})
 
 	dp.Metrics.SumReadLatencyNano = 0
 	dp.Metrics.SumWriteLatencyNano = 0
