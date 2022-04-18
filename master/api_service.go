@@ -736,6 +736,7 @@ func (m *Server) createVol(w http.ResponseWriter, r *http.Request) {
 		authenticate    bool
 		crossZone       bool
 		defaultPriority bool
+		enablePosixAcl  bool
 		zoneName        string
 		description     string
 	)
@@ -743,7 +744,7 @@ func (m *Server) createVol(w http.ResponseWriter, r *http.Request) {
 	if name, owner, zoneName, description,
 		mpCount, dpReplicaNum, size,
 		capacity, followerRead,
-		authenticate, crossZone, defaultPriority,
+		authenticate, crossZone, defaultPriority, enablePosixAcl,
 		err = parseRequestToCreateVol(r); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
@@ -756,7 +757,7 @@ func (m *Server) createVol(w http.ResponseWriter, r *http.Request) {
 	if vol, err = m.cluster.createVol(name, owner, zoneName, description,
 		mpCount, dpReplicaNum, size, capacity,
 		followerRead, authenticate, crossZone,
-		defaultPriority); err != nil {
+		defaultPriority, enablePosixAcl); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
@@ -811,6 +812,7 @@ func newSimpleView(vol *Vol) *proto.SimpleVolView {
 		Status:             vol.Status,
 		Capacity:           vol.Capacity,
 		FollowerRead:       vol.FollowerRead,
+		EnablePosixAcl:     vol.enablePosixAcl,
 		NeedToLowerReplica: vol.NeedToLowerReplica,
 		Authenticate:       vol.authenticate,
 		CrossZone:          vol.crossZone,
@@ -2315,7 +2317,7 @@ func parseRequestToSetVolCapacity(r *http.Request) (name, authKey string, capaci
 func parseRequestToCreateVol(r *http.Request) (name, owner, zoneName, description string,
 	mpCount, dpReplicaNum, size,
 	capacity int, followerRead,
-	authenticate, crossZone, defaultPriority bool,
+	authenticate, crossZone, defaultPriority, enablePosixAcl bool,
 	err error) {
 	if err = r.ParseForm(); err != nil {
 		return
@@ -2374,8 +2376,13 @@ func parseRequestToCreateVol(r *http.Request) (name, owner, zoneName, descriptio
 		return
 	}
 
+	if enablePosixAcl, err = extractPosixAcl(r); err != nil {
+		return
+	}
+
 	zoneName = r.FormValue(zoneNameKey)
 	description = r.FormValue(descriptionKey)
+
 	return
 }
 
@@ -2529,6 +2536,20 @@ func extractStatus(r *http.Request) (status bool, err error) {
 		return
 	}
 	return
+}
+
+func extractPosixAcl(r *http.Request) (enablePosix bool, err error) {
+	var value string
+	if value = r.FormValue(enablePosixAclKey); value == "" {
+		return
+	}
+
+	status, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("parse %s failed, val %s", enablePosixAclKey, value)
+	}
+
+	return status, nil
 }
 
 func extractFollowerRead(r *http.Request) (followerRead bool, exist bool, err error) {

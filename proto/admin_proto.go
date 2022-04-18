@@ -493,6 +493,7 @@ type SimpleVolView struct {
 	DomainOn           bool
 	CreateTime         string
 	EnableToken        bool
+	EnablePosixAcl     bool
 	Description        string
 	DpSelectorName     string
 	DpSelectorParm     string

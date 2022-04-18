@@ -56,6 +56,7 @@ type Vol struct {
 	crossZone          bool
 	domainOn           bool
 	defaultPriority    bool // old default zone first
+	enablePosixAcl     bool
 	zoneName           string
 	MetaPartitions     map[uint64]*MetaPartition `graphql:"-"`
 	mpsLock            sync.RWMutex
@@ -74,7 +75,7 @@ type Vol struct {
 func newVol(id uint64, name, owner, zoneName string,
 	dpSize, capacity uint64, dpReplicaNum,
 	mpReplicaNum uint8, followerRead, authenticate,
-	crossZone bool, defaultPriority bool,
+	crossZone bool, defaultPriority bool, enablePosixAcl bool,
 	createTime int64, description string) (vol *Vol) {
 	vol = &Vol{ID: id, Name: name, MetaPartitions: make(map[uint64]*MetaPartition, 0)}
 	vol.dataPartitions = newDataPartitionMap(name)
@@ -105,6 +106,7 @@ func newVol(id uint64, name, owner, zoneName string,
 	vol.createTime = createTime
 	vol.description = description
 	vol.defaultPriority = defaultPriority
+	vol.enablePosixAcl = enablePosixAcl
 	return
 }
 
@@ -122,6 +124,7 @@ func newVolFromVolValue(vv *volValue) (vol *Vol) {
 		vv.Authenticate,
 		vv.CrossZone,
 		vv.DefaultPriority,
+		vv.EnablePosixAcl,
 		vv.CreateTime,
 		vv.Description)
 	// overwrite oss secure

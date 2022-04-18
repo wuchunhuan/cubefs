@@ -192,7 +192,7 @@ func (s *VolumeService) createVolume(ctx context.Context, args struct {
 
 	vol, err := s.cluster.createVol(args.Name, args.Owner, args.ZoneName, args.Description, int(args.MpCount),
 		int(args.DpReplicaNum), int(args.DataPartitionSize), int(args.Capacity),
-		args.FollowerRead, args.Authenticate, args.CrossZone, args.DefaultPriority)
+		args.FollowerRead, args.Authenticate, args.CrossZone, args.DefaultPriority, false)
 	if err != nil {
 		return nil, err
 	}

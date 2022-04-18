@@ -2113,7 +2113,7 @@ func (c *Cluster) checkVolInfo(name string, crossZone bool, zoneName string) (ne
 // By default we create 3 meta partitions and 10 data partitions during initialization.
 func (c *Cluster) createVol(name, owner, zoneName, description string,
 	mpCount, dpReplicaNum, size, capacity int,
-	followerRead, authenticate, crossZone, defaultPriority bool) (vol *Vol, err error) {
+	followerRead, authenticate, crossZone, defaultPriority, enablePosixAcl bool) (vol *Vol, err error) {
 	var (
 		dataPartitionSize       uint64
 		readWriteDataPartitions int
@@ -2137,7 +2137,7 @@ func (c *Cluster) createVol(name, owner, zoneName, description string,
 	if vol, err = c.doCreateVol(name, owner, zoneName, description,
 		dataPartitionSize, uint64(capacity), dpReplicaNum,
 		followerRead, authenticate, crossZone,
-		defaultPriority); err != nil {
+		defaultPriority, enablePosixAcl); err != nil {
 		goto errHandler
 	}
 	if err = vol.initMetaPartitions(c, mpCount); err != nil {
@@ -2172,7 +2172,7 @@ errHandler:
 func (c *Cluster) doCreateVol(name, owner, zoneName, description string,
 	dpSize, capacity uint64, dpReplicaNum int,
 	followerRead, authenticate, crossZone,
-	defaultPriority bool) (vol *Vol, err error) {
+	defaultPriority, enablePosixAcl bool) (vol *Vol, err error) {
 	var id uint64
 	c.createVolMutex.Lock()
 	defer c.createVolMutex.Unlock()
@@ -2188,7 +2188,7 @@ func (c *Cluster) doCreateVol(name, owner, zoneName, description string,
 	vol = newVol(id, name, owner, zoneName, dpSize,
 		capacity, uint8(dpReplicaNum), defaultReplicaNum,
 		followerRead, authenticate, crossZone,
-		defaultPriority, createTime, description)
+		defaultPriority, enablePosixAcl, createTime, description)
 	// refresh oss secure
 	vol.refreshOSSSecure()
 	if err = c.syncAddVol(vol); err != nil {

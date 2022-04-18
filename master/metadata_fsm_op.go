@@ -150,6 +150,7 @@ type volValue struct {
 	DpSelectorName    string
 	DpSelectorParm    string
 	DefaultPriority   bool
+	EnablePosixAcl    bool
 }
 
 func (v *volValue) Bytes() (raw []byte, err error) {
@@ -179,6 +180,7 @@ func newVolValue(vol *Vol) (vv *volValue) {
 		DpSelectorName:    vol.dpSelectorName,
 		DpSelectorParm:    vol.dpSelectorParm,
 		DefaultPriority:   vol.defaultPriority,
+		EnablePosixAcl:    vol.enablePosixAcl,
 	}
 	return
 }

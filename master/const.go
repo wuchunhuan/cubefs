@@ -60,6 +60,7 @@ const (
 	srcAddrKey              = "srcAddr"
 	targetAddrKey           = "targetAddr"
 	forceKey                = "force"
+	enablePosixAclKey       = "enablePosixAcl"
 )
 
 const (
