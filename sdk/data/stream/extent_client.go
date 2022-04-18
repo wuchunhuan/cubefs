@@ -16,9 +16,10 @@ package stream
 
 import (
 	"fmt"
-	"github.com/cubefs/cubefs/sdk/meta"
 	"sync"
 	"time"
+
+	"github.com/cubefs/cubefs/sdk/meta"
 
 	"golang.org/x/time/rate"
 
@@ -146,6 +147,10 @@ retry:
 	client.writeLimiter = rate.NewLimiter(writeLimit, defaultWriteLimitBurst)
 
 	return
+}
+
+func (client *ExtentClient) GetEnablePosixAcl() bool {
+	return client.dataWrapper.EnablePosixAcl
 }
 
 // Open request shall grab the lock until request is sent to the request channel

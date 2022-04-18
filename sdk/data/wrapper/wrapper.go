@@ -42,6 +42,7 @@ type Wrapper struct {
 	sync.RWMutex
 	clusterName           string
 	volName               string
+	EnablePosixAcl        bool
 	masters               []string
 	partitions            map[uint64]*DataPartition
 	followerRead          bool
@@ -127,6 +128,7 @@ func (w *Wrapper) getSimpleVolView() (err error) {
 	w.followerRead = view.FollowerRead
 	w.dpSelectorName = view.DpSelectorName
 	w.dpSelectorParm = view.DpSelectorParm
+	w.EnablePosixAcl = view.EnablePosixAcl
 
 	log.LogInfof("getSimpleVolView: get volume simple info: ID(%v) name(%v) owner(%v) status(%v) capacity(%v) "+
 		"metaReplicas(%v) dataReplicas(%v) mpCnt(%v) dpCnt(%v) followerRead(%v) createTime(%v) dpSelectorName(%v) "+
