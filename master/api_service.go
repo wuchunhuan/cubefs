@@ -604,6 +604,7 @@ func (m *Server) updateVol(w http.ResponseWriter, r *http.Request) {
 		replicaNum     int
 		followerRead   bool
 		authenticate   bool
+		enablePosixAcl bool
 		zoneName       string
 		description    string
 		dpSelectorName string
@@ -619,7 +620,7 @@ func (m *Server) updateVol(w http.ResponseWriter, r *http.Request) {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeVolNotExists, Msg: err.Error()})
 		return
 	}
-	if zoneName, capacity, replicaNum, dpSelectorName, dpSelectorParm, err =
+	if zoneName, capacity, replicaNum, dpSelectorName, dpSelectorParm, enablePosixAcl, err =
 		parseDefaultInfoToUpdateVol(r, vol); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
@@ -644,6 +645,7 @@ func (m *Server) updateVol(w http.ResponseWriter, r *http.Request) {
 	newArgs.dpSelectorName = dpSelectorName
 	newArgs.dpSelectorParm = dpSelectorParm
 	newArgs.dpReplicaNum = uint8(replicaNum)
+	newArgs.enablePosixAcl = enablePosixAcl
 
 	if err = m.cluster.updateVol(name, authKey, newArgs); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
@@ -2240,7 +2242,7 @@ func parseRequestToUpdateVol(r *http.Request) (name, authKey, description string
 }
 
 func parseDefaultInfoToUpdateVol(r *http.Request, vol *Vol) (zoneName string, capacity uint64, replicaNum int,
-	dpSelectorName string, dpSelectorParm string, err error) {
+	dpSelectorName string, dpSelectorParm string, enablePosixAcl bool, err error) {
 	if err = r.ParseForm(); err != nil {
 		return
 	}
@@ -2265,6 +2267,12 @@ func parseDefaultInfoToUpdateVol(r *http.Request, vol *Vol) (zoneName string, ca
 	} else {
 		replicaNum = int(vol.dpReplicaNum)
 	}
+
+	enablePosixAcl, err = pareseBoolWithDefault(r, enablePosixAclKey, vol.enablePosixAcl)
+	if err != nil {
+		return
+	}
+
 	dpSelectorName = r.FormValue(dpSelectorNameKey)
 	dpSelectorParm = r.FormValue(dpSelectorParmKey)
 	if (dpSelectorName == "") || (dpSelectorParm == "") {
@@ -2276,6 +2284,20 @@ func parseDefaultInfoToUpdateVol(r *http.Request, vol *Vol) (zoneName string, ca
 		dpSelectorParm = vol.dpSelectorParm
 	}
 	return
+}
+
+func pareseBoolWithDefault(r *http.Request, key string, old bool) (bool, error) {
+	val := r.FormValue(key)
+	if val == "" {
+		return old, nil
+	}
+
+	newVal, err := strconv.ParseBool(val)
+	if err != nil {
+		return false, fmt.Errorf("parse %s bool val err, err %s", key, err.Error())
+	}
+
+	return newVal, nil
 }
 
 func parseBoolFieldToUpdateVol(r *http.Request, vol *Vol) (followerRead, authenticate bool, err error) {

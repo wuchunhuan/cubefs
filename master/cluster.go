@@ -1990,6 +1990,7 @@ func (c *Cluster) updateVol(name, authKey string, newArgs *VolVarargs) (err erro
 		oldDescription    string
 		oldDpSelectorName string
 		oldDpSelectorParm string
+		oldEnablePosixAcl bool
 		volUsedSpace      uint64
 		newZoneName       string
 	)
@@ -2028,11 +2029,13 @@ func (c *Cluster) updateVol(name, authKey string, newArgs *VolVarargs) (err erro
 	oldDescription = vol.description
 	oldDpSelectorName = vol.dpSelectorName
 	oldDpSelectorParm = vol.dpSelectorParm
+	oldEnablePosixAcl = vol.enablePosixAcl
 
 	vol.zoneName = newArgs.zoneName
 	vol.Capacity = newArgs.capacity
 	vol.FollowerRead = newArgs.followerRead
 	vol.authenticate = newArgs.authenticate
+	vol.enablePosixAcl = newArgs.enablePosixAcl
 	if newArgs.description != "" {
 		vol.description = newArgs.description
 	}
@@ -2052,6 +2055,7 @@ func (c *Cluster) updateVol(name, authKey string, newArgs *VolVarargs) (err erro
 		vol.description = oldDescription
 		vol.dpSelectorName = oldDpSelectorName
 		vol.dpSelectorParm = oldDpSelectorParm
+		vol.enablePosixAcl = oldEnablePosixAcl
 
 		log.LogErrorf("action[updateVol] vol[%v] err[%v]", name, err)
 		err = proto.ErrPersistenceByRaft

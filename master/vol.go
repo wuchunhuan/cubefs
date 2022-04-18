@@ -35,6 +35,7 @@ type VolVarargs struct {
 	authenticate   bool
 	dpSelectorName string
 	dpSelectorParm string
+	enablePosixAcl bool
 }
 
 // Vol represents a set of meta partitionMap and data partitionMap
