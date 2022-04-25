@@ -1468,14 +1468,6 @@ func (c *Cluster) migrateDataPartition(srcAddr, targetAddr string, dp *DataParti
 		excludeNodeSets = append(excludeNodeSets, ns.ID)
 		if targetHosts, _, err = zone.getAvailDataNodeHosts(excludeNodeSets, dp.Hosts, 1); err != nil {
 			log.LogErrorf("action[migrateDataPartition] get host err %v", err)
-			// select data nodes from the other zone
-			zones = dp.getLiveZones(srcAddr)
-			var excludeZone []string
-			if len(zones) == 0 {
-				excludeZone = append(excludeZone, zone.name)
-			} else {
-				excludeZone = append(excludeZone, zones[0])
-			}
 			goto errHandler
 		}
 	}
