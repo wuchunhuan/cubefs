@@ -269,6 +269,7 @@ func (api *AdminAPI) CreateVolume(volName, owner string, mpCount int,
 	request.addParam("capacity", strconv.FormatUint(capacity, 10))
 	request.addParam("followerRead", strconv.FormatBool(followerRead))
 	request.addParam("zoneName", zoneName)
+	request.addParam("replicaNum", strconv.Itoa(replicas))
 	request.addParam("crossZone", strconv.FormatBool(crossZone))
 	if _, err = api.mc.serveRequest(request); err != nil {
 		return
