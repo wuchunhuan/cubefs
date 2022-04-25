@@ -1183,6 +1183,7 @@ func (c *Cluster) decommissionCancel(dataNode *DataNode) (err error) {
 			dp.singleDecommissionChan <- false
 		}
 	}
+	dataNode.ToBeOffline = false
 	return
 }
 
@@ -1244,7 +1245,6 @@ func (c *Cluster) migrateDataNode(srcAddr, targetAddr string, limit int) (err er
 		}(toBeOffLinePartitions[i])
 	}
 
-
 	go func(dataNode *DataNode) {
 		log.LogInfof("action[decommissionDataNode] wait subroutine  finished")
 		wg.Wait()
@@ -1255,13 +1255,14 @@ func (c *Cluster) migrateDataNode(srcAddr, targetAddr string, limit int) (err er
 			return
 		default:
 		}
-		
+
 		if limit < len(partitions) {
 			log.LogWarnf("action[migrateDataNode] clusterID[%v] migrate from [%s] to [%s] cnt[%d] success", c.Name, srcAddr, targetAddr, limit)
 			dataNode.ToBeOffline = false
 			close(errChannel)
 			return
 		}
+		
 		if err = c.syncDeleteDataNode(dataNode); err != nil {
 			msg = fmt.Sprintf("action[decommissionDataNode],clusterID[%v] Node[%v] OffLine failed,err[%v]",
 				c.Name, dataNode.Addr, err)
