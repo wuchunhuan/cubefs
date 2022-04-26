@@ -1021,10 +1021,10 @@ func (s *DataNode) handlePacketToRemoveDataPartitionRaftMember(p *repl.Packet) {
 	}
 
 	if dp.replicaNum == 2 && req.Force {
-		cc  := &raftProto.ConfChange{
-			Type:raftProto.ConfRemoveNode,
-			Peer:raftProto.Peer{
-				ID:	req.RemovePeer.ID,
+		cc := &raftProto.ConfChange{
+			Type: raftProto.ConfRemoveNode,
+			Peer: raftProto.Peer{
+				ID: req.RemovePeer.ID,
 			},
 			Context: reqData,
 		}

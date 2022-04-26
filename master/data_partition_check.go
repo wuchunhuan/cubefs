@@ -52,7 +52,7 @@ func (partition *DataPartition) checkStatus(clusterName string, needLog bool, dp
 			partition.PartitionID, partition.ReplicaNum, partition.Status, len(liveReplicas))
 		partition.Status = proto.ReadOnly
 		if partition.SingleDecommissionStatus == datanode.DecommsionWaitAddRes {
-			if len(liveReplicas) == int(partition.ReplicaNum + 1) && partition.checkReplicaNotHaveStatus(liveReplicas, proto.Unavailable) == true {
+			if len(liveReplicas) == int(partition.ReplicaNum+1) && partition.checkReplicaNotHaveStatus(liveReplicas, proto.Unavailable) == true {
 				partition.SingleDecommissionStatus = datanode.DecommsionWaitAddResFin
 				log.LogInfof("action[checkStatus] partition %v with single replica on decommison and continue to remove old replica",
 					partition.PartitionID)

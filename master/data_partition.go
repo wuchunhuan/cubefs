@@ -40,8 +40,8 @@ type DataPartition struct {
 	Peers          []proto.Peer
 	offlineMutex   sync.RWMutex
 	sync.RWMutex
-	total                   uint64
-	used                    uint64
+	total                    uint64
+	used                     uint64
 	MissingNodes             map[string]int64 // key: address of the missing node, value: when the node is missing
 	VolName                  string
 	VolID                    uint64
@@ -54,7 +54,7 @@ type DataPartition struct {
 	SingleDecommissionStatus uint8
 	singleDecommissionChan   chan bool
 	SingleDecommissionAddr   string
-	RdOnly					 bool
+	RdOnly                   bool
 }
 
 func newDataPartition(ID uint64, replicaNum uint8, volName string, volID uint64) (partition *DataPartition) {
@@ -453,9 +453,8 @@ func (partition *DataPartition) checkReplicaNum(c *Cluster, vol *Vol) {
 		msg := fmt.Sprintf("FIX DataPartition replicaNum,clusterID[%v] volName[%v] partitionID:%v orgReplicaNum:%v",
 			c.Name, vol.Name, partition.PartitionID, partition.ReplicaNum)
 		Warn(c.Name, msg)
-		if partition.isSpecialReplicaCnt() && (
-				partition.SingleDecommissionStatus == datanode.DecommsionErr || // case decommission error
-					partition.SingleDecommissionStatus == 0) { // case restart and no message left,delete the lasted replica be added
+		if partition.isSpecialReplicaCnt() && (partition.SingleDecommissionStatus == datanode.DecommsionErr || // case decommission error
+			partition.SingleDecommissionStatus == 0) { // case restart and no message left,delete the lasted replica be added
 			log.LogInfof("action[checkReplicaNum] volume %v partiton %v need decommssion", partition.VolName, partition.PartitionID)
 			vol.NeedToLowerReplica = true
 			return
@@ -776,21 +775,21 @@ func (partition *DataPartition) ToProto(c *Cluster) *proto.DataPartitionInfo {
 		}
 	}
 	return &proto.DataPartitionInfo{
-		PartitionID:             partition.PartitionID,
-		LastLoadedTime:          partition.LastLoadedTime,
-		ReplicaNum:              partition.ReplicaNum,
-		Status:                  partition.Status,
-		Replicas:                replicas,
-		Hosts:                   partition.Hosts,
-		Peers:                   partition.Peers,
-		Zones:                   zones,
-		MissingNodes:            partition.MissingNodes,
-		VolName:                 partition.VolName,
-		VolID:                   partition.VolID,
-		FileInCoreMap:           fileInCoreMap,
-		OfflinePeerID:           partition.OfflinePeerID,
-		IsRecover:               partition.isRecover,
-		FilesWithMissingReplica: partition.FilesWithMissingReplica,
+		PartitionID:              partition.PartitionID,
+		LastLoadedTime:           partition.LastLoadedTime,
+		ReplicaNum:               partition.ReplicaNum,
+		Status:                   partition.Status,
+		Replicas:                 replicas,
+		Hosts:                    partition.Hosts,
+		Peers:                    partition.Peers,
+		Zones:                    zones,
+		MissingNodes:             partition.MissingNodes,
+		VolName:                  partition.VolName,
+		VolID:                    partition.VolID,
+		FileInCoreMap:            fileInCoreMap,
+		OfflinePeerID:            partition.OfflinePeerID,
+		IsRecover:                partition.isRecover,
+		FilesWithMissingReplica:  partition.FilesWithMissingReplica,
 		SingleDecommissionStatus: partition.SingleDecommissionStatus,
 		SingleDecommissionAddr:   partition.SingleDecommissionAddr,
 	}

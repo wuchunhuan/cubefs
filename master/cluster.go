@@ -1262,7 +1262,7 @@ func (c *Cluster) migrateDataNode(srcAddr, targetAddr string, limit int) (err er
 			close(errChannel)
 			return
 		}
-		
+
 		if err = c.syncDeleteDataNode(dataNode); err != nil {
 			msg = fmt.Sprintf("action[decommissionDataNode],clusterID[%v] Node[%v] OffLine failed,err[%v]",
 				c.Name, dataNode.Addr, err)

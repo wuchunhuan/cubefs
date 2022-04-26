@@ -32,7 +32,7 @@ func newCreateDataPartitionRequest(volName string, ID uint64, replicaNum int, me
 	req = &proto.CreateDataPartitionRequest{
 		PartitionId:   ID,
 		PartitionSize: dataPartitionSize,
-		ReplicaNum:	   replicaNum,
+		ReplicaNum:    replicaNum,
 		VolumeId:      volName,
 		Members:       members,
 		Hosts:         hosts,

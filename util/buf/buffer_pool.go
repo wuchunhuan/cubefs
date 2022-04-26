@@ -12,7 +12,7 @@ import (
 
 const (
 	HeaderBufferPoolSize = 8192
-	InvalidLimit = 0
+	InvalidLimit         = 0
 )
 
 var tinyBuffersTotalLimit int64 = 4096
@@ -63,9 +63,9 @@ func NewNormalBufferPool() *sync.Pool {
 
 // BufferPool defines the struct of a buffered pool with 4 objects.
 type BufferPool struct {
-	pools    [2]chan []byte
-	tinyPool *sync.Pool
-	headPool *sync.Pool
+	pools      [2]chan []byte
+	tinyPool   *sync.Pool
+	headPool   *sync.Pool
 	normalPool *sync.Pool
 }
 
