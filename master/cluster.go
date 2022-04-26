@@ -1410,7 +1410,6 @@ func (c *Cluster) migrateDataPartition(srcAddr, targetAddr string, dp *DataParti
 		replica         *DataReplica
 		ns              *nodeSet
 		excludeNodeSets []uint64
-		zones           []string
 	)
 
 	dp.RLock()
