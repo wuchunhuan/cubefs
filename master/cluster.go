@@ -804,6 +804,7 @@ func (c *Cluster) batchCreateDataPartition(vol *Vol, reqCount int) (err error) {
 	}
 	return
 }
+
 func (c *Cluster) isFaultDomain(vol *Vol) bool {
 	var specifyZoneNeedDomain bool
 	if c.FaultDomain && !vol.crossZone && !c.needFaultDomain {
@@ -1464,12 +1465,12 @@ func (c *Cluster) migrateDataPartition(srcAddr, targetAddr string, dp *DataParti
 		if _, ok := c.vols[dp.VolName]; !ok {
 			log.LogWarnf("clusterID[%v] partitionID:%v  on Node:%v offline failed,PersistenceHosts:[%v]",
 				c.Name, dp.PartitionID, srcAddr, dp.Hosts)
-			return
+			goto errHandler
 		}
 		if c.isFaultDomain(c.vols[dp.VolName]) {
 			log.LogErrorf("clusterID[%v] partitionID:%v  on Node:%v is banlance zone,PersistenceHosts:[%v]",
 				c.Name, dp.PartitionID, srcAddr, dp.Hosts)
-			return
+			goto errHandler
 		}
 		// select data nodes from the other node set in same zone
 		excludeNodeSets = append(excludeNodeSets, ns.ID)
@@ -1508,6 +1509,11 @@ func (c *Cluster) migrateDataPartition(srcAddr, targetAddr string, dp *DataParti
 	return
 
 errHandler:
+	if dp.isSpecialReplicaCnt() {
+		if dp.SingleDecommissionStatus == datanode.DecommsionEnter {
+			dp.SingleDecommissionStatus = 0
+		}
+	}
 	msg = fmt.Sprintf(errMsg+" clusterID[%v] partitionID:%v  on Node:%v  "+
 		"Then Fix It on newHost:%v   Err:%v , PersistenceHosts:%v  ",
 		c.Name, dp.PartitionID, srcAddr, newAddr, err, dp.Hosts)
