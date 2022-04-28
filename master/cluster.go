@@ -1224,7 +1224,7 @@ func (c *Cluster) migrateDataNode(srcAddr, targetAddr string, limit int) (err er
 	}
 
 	if len(toBeOffLinePartitions) <= 0 && len(partitions) != 0 {
-		err =  fmt.Errorf("migrateDataNode no partition can migrate from [%s] to [%s]", srcAddr, targetAddr)
+		err = fmt.Errorf("migrateDataNode no partition can migrate from [%s] to [%s]", srcAddr, targetAddr)
 		log.LogWarn("action[migrateDataNode] %v", err)
 		return
 	}
