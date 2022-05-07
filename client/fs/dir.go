@@ -31,8 +31,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cubefs/cubefs/proto"
-	"github.com/cubefs/cubefs/util/exporter"
 	"github.com/cubefs/cubefs/util/auditlog"
+	"github.com/cubefs/cubefs/util/exporter"
 )
 
 // used to locate the position in parent
