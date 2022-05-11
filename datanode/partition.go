@@ -480,6 +480,7 @@ func (dp *DataPartition) PersistMetadata() (err error) {
 	md := &DataPartitionMetadata{
 		VolumeID:                dp.config.VolName,
 		PartitionID:             dp.config.PartitionID,
+		ReplicaNum:              dp.config.ReplicaNum,
 		PartitionSize:           dp.config.PartitionSize,
 		Peers:                   dp.config.Peers,
 		Hosts:                   dp.config.Hosts,
