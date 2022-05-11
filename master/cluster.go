@@ -693,6 +693,10 @@ func (c *Cluster) checkCorruptDataPartitions() (inactiveDataNodes []string, corr
 		if partition, err = c.getDataPartitionByID(partitionID); err != nil {
 			return
 		}
+		if partition.isSpecialReplicaCnt() && badNum > 0 {
+			corruptPartitions = append(corruptPartitions, partition)
+			continue
+		}
 		if badNum > partition.ReplicaNum/2 {
 			corruptPartitions = append(corruptPartitions, partition)
 		}
