@@ -92,7 +92,7 @@ func (dp *DataPartition) MetricsRefresh() {
 		dp.Metrics.AvgReadLatencyNano = 0
 	}
 	readMetrics := exporter.NewGauge("ReadLatencyPacket")
-	readMetrics.SetWithLabels(float64(dp.Metrics.AvgReadLatencyNano / 1e6), map[string]string{exporter.Vol : dp.ClientWrapper.volName})
+	readMetrics.SetWithLabels(float64(dp.Metrics.AvgReadLatencyNano/1e6), map[string]string{exporter.Vol: dp.ClientWrapper.volName})
 
 	if dp.Metrics.WriteOpNum != 0 {
 		dp.Metrics.AvgWriteLatencyNano = dp.Metrics.SumWriteLatencyNano / dp.Metrics.WriteOpNum
@@ -100,7 +100,7 @@ func (dp *DataPartition) MetricsRefresh() {
 		dp.Metrics.AvgWriteLatencyNano = 0
 	}
 	writeMetrics := exporter.NewGauge("WriteLatencyPacket")
-	writeMetrics.SetWithLabels(float64(dp.Metrics.AvgWriteLatencyNano / 1e6), map[string]string{exporter.Vol : dp.ClientWrapper.volName})
+	writeMetrics.SetWithLabels(float64(dp.Metrics.AvgWriteLatencyNano/1e6), map[string]string{exporter.Vol: dp.ClientWrapper.volName})
 
 	dp.Metrics.SumReadLatencyNano = 0
 	dp.Metrics.SumWriteLatencyNano = 0

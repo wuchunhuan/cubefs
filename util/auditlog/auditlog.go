@@ -156,8 +156,8 @@ type AuditLog struct {
 	tablePool       *TablePool
 	connPool        *ConnPool
 	enqueueC        chan *logs.LogRecord
-	stopC chan struct{}
-	freezeLock sync.Mutex
+	stopC           chan struct{}
+	freezeLock      sync.Mutex
 }
 
 func getAddr() (HostName, IPAddr string) {
@@ -317,7 +317,7 @@ func (audit *AuditLog) tryPushFreezeTable() (isEmpty bool) {
 	audit.freezeLock.Lock()
 	// export frozen table list size to prometheus
 	auditSizeExporter := exporter.NewGauge("AuditFreezeTableListSize")
-	auditSizeExporter.SetWithLabels(float64(audit.freezeTableList.Len()), map[string]string{exporter.Vol : audit.volName})
+	auditSizeExporter.SetWithLabels(float64(audit.freezeTableList.Len()), map[string]string{exporter.Vol: audit.volName})
 	element := audit.freezeTableList.Front()
 	if element == nil {
 		audit.freezeLock.Unlock()
@@ -350,7 +350,7 @@ func (audit *AuditLog) tryPushFreezeTable() (isEmpty bool) {
 		remain = remain - step
 		// export latency to prometheus
 		auditLatencyExporter := exporter.NewGauge("AuditExportLatency")
-		auditLatencyExporter.SetWithLabels(float64(time.Since(startTime).Milliseconds()), map[string]string{exporter.Vol : audit.volName})
+		auditLatencyExporter.SetWithLabels(float64(time.Since(startTime).Milliseconds()), map[string]string{exporter.Vol: audit.volName})
 	}
 	table.Clear()
 	audit.tablePool.Put(table)
