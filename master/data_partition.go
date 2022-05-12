@@ -55,6 +55,7 @@ type DataPartition struct {
 	singleDecommissionChan   chan bool
 	SingleDecommissionAddr   string
 	RdOnly                   bool
+	addReplicaMutex  sync.RWMutex
 }
 
 func newDataPartition(ID uint64, replicaNum uint8, volName string, volID uint64) (partition *DataPartition) {

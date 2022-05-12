@@ -1577,19 +1577,27 @@ func (c *Cluster) addDataReplica(dp *DataPartition, addr string) (err error) {
 		if err != nil {
 			log.LogErrorf("action[addDataReplica],vol[%v],data partition[%v],err[%v]", dp.VolName, dp.PartitionID, err)
 		}
+		log.LogInfof("action[addDataReplica]  dp %v add replica dst addr %v success!", dp.PartitionID, addr)
 	}()
+
+	log.LogInfof("action[addDataReplica]  dp %v try add replica dst addr %v try add raft member", dp.PartitionID, addr)
+
+	dp.addReplicaMutex.Lock()
+	defer dp.addReplicaMutex.Unlock()
+
 	dataNode, err := c.dataNode(addr)
 	if err != nil {
 		return
 	}
 	addPeer := proto.Peer{ID: dataNode.ID, Addr: addr}
-	log.LogInfof("action[addDataReplica] addr %v try add raft member", addr)
+	log.LogInfof("action[addDataReplica] dp %v dst addr %v try add raft member, node id %v", dp.PartitionID, addr, dataNode.ID)
 	if err = c.addDataPartitionRaftMember(dp, addPeer); err != nil {
-		log.LogInfof("action[addDataReplica] addr %v try add raft member err [%v]", addr, err)
+		log.LogInfof("action[addDataReplica] dp %v addr %v try add raft member err [%v]", dp.PartitionID, addr, err)
 		return
 	}
-	log.LogInfof("action[addDataReplica] addr %v try create data replica", addr)
+	log.LogInfof("action[addDataReplica] dp %v daddr %v try create data replica", dp.PartitionID, addr)
 	if err = c.createDataReplica(dp, addPeer); err != nil {
+		log.LogInfof("action[addDataReplica] dp %v addr %v createDataReplica err [%v]", dp.PartitionID, addr, err)
 		return
 	}
 	return
