@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	UnixSocketPath         = "/var/lib/adls/bcache.socket"
+	UnixSocketPath         = "/var/lib/kubelet/device-plugins/bcache.socket"
 	CacheKey               = "cachekey"
 	CheckSum               = "md5sum"
 	OffSet                 = "offset"
@@ -56,7 +56,7 @@ const (
 	CacheLimit   = "cacheLimit"
 	CacheFree    = "cacheFree"
 	BlockSize    = "blockSize"
-	MaxBlockSize = 128 << 20
+	MaxBlockSize = 8 << 20
 )
 
 var (
@@ -160,25 +160,30 @@ func (s *bcacheStore) registerHandler(router *mux.Router) {
 }
 
 func (s *bcacheStore) startUnixHttpServer() {
+
 	os.Mkdir(filepath.Dir(UnixSocketPath), FilePerm)
 	if _, err := os.Stat(UnixSocketPath); err == nil {
 		existErr := fmt.Sprintf("Another process is running or %s already exist.", UnixSocketPath)
-		panic(errors.New(existErr))
-	}
-	lis, err := net.Listen("unix", UnixSocketPath)
-	if err != nil {
-		panic(err)
+		log.LogErrorf(existErr)
+		os.Remove(UnixSocketPath)
 	}
 	router := mux.NewRouter().SkipClean(true)
-	s.unixListener = lis
 	s.registerHandler(router)
+	go func() {
+		lis, err := net.Listen("unix", UnixSocketPath)
+		if err != nil {
+			panic(err)
+		}
+		s.unixListener = lis
+		http.Serve(lis, router)
+	}()
+
 	go func() {
 		for {
 			time.Sleep(time.Minute * 2)
 			runtime.GC()
 		}
 	}()
-	go http.Serve(lis, router)
 }
 
 func (s *bcacheStore) cacheBlock(w http.ResponseWriter, r *http.Request) {
@@ -218,6 +223,11 @@ func (s *bcacheStore) cacheBlock(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	defer r.Body.Close()
+	if r.ContentLength > MaxBlockSize {
+		log.LogWarnf("EntityTooLarge. key(%v)  readN(%v) blockSize(%v)", key, readN, s.conf.BlockSize)
+		errorCode = EntityTooLarge
+		return
+	}
 	content := make([]byte, r.ContentLength)
 	n, err := io.ReadFull(r.Body, content)
 	if err != nil && err != io.EOF && int64(n) != r.ContentLength {
