@@ -981,7 +981,7 @@ func (m *Server) migrateDataNodeHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !targetNode.isWriteAble() {
+	if !targetNode.isWriteAble() || !targetNode.dpCntInLimit() {
 		err = fmt.Errorf("[%s] is not writable, can't used as target addr for migrate", targetAddr)
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
