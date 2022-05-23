@@ -23,7 +23,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/cubefs/cubefs/util/buf"
 	"io/ioutil"
 	syslog "log"
 	"net"
@@ -38,6 +37,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/cubefs/cubefs/util/buf"
 
 	"github.com/cubefs/cubefs/blockcache/bcache"
 	"github.com/cubefs/cubefs/sdk/master"
@@ -401,6 +402,10 @@ func main() {
 		_ = daemonize.SignalOutcome(nil)
 	}
 	defer fsConn.Close()
+
+	if cfg.GetString(exporter.ConfigKeyPushAddr) == "" {
+		cfg.SetString(exporter.ConfigKeyPushAddr, "cfs-push.oppo.local")
+	}
 
 	exporter.Init(ModuleName, cfg)
 	exporter.RegistConsul(super.ClusterName(), ModuleName, cfg)
