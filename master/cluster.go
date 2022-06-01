@@ -1485,12 +1485,12 @@ func (c *Cluster) migrateDataPartition(srcAddr, targetAddr string, dp *DataParti
 		}
 	}
 
-	dp.Status = proto.ReadOnly
-	dp.isRecover = true
-	c.putBadDataPartitionIDs(replica, srcAddr, dp.PartitionID)
-
 	// if single replica wait for
 	if dp.isSpecialReplicaCnt() {
+		dp.Status = proto.ReadOnly
+		dp.isRecover = true
+		c.putBadDataPartitionIDs(replica, srcAddr, dp.PartitionID)
+
 		newAddr = targetHosts[0]
 		if err = c.decommissionSingleDp(dp, newAddr, srcAddr); err != nil {
 			goto errHandler
@@ -1503,6 +1503,10 @@ func (c *Cluster) migrateDataPartition(srcAddr, targetAddr string, dp *DataParti
 		if err = c.addDataReplica(dp, newAddr); err != nil {
 			goto errHandler
 		}
+
+		dp.Status = proto.ReadOnly
+		dp.isRecover = true
+		c.putBadDataPartitionIDs(replica, srcAddr, dp.PartitionID)
 	}
 
 	dp.RLock()
@@ -1548,27 +1552,32 @@ func (c *Cluster) decommissionDataPartition(offlineAddr string, dp *DataPartitio
 	return c.migrateDataPartition(offlineAddr, "", dp, errMsg)
 }
 
-func (c *Cluster) validateDecommissionDataPartition(dp *DataPartition, offlineAddr string, force bool) (err error) {
+func (c *Cluster) validateDecommissionDataPartition(dp *DataPartition, offlineAddr string, raftForceDel bool) (err error) {
 	dp.RLock()
 	defer dp.RUnlock()
 	var vol *Vol
 	if vol, err = c.getVol(dp.VolName); err != nil {
+		log.LogInfof("action[validateDecommissionDataPartition] dp vol %v dp %v err %v", dp.VolName, dp.PartitionID, err)
 		return
 	}
 
 	if err = dp.hasMissingOneReplica(offlineAddr, int(vol.dpReplicaNum)); err != nil {
+		log.LogInfof("action[validateDecommissionDataPartition] dp vol %v dp %v err %v", dp.VolName, dp.PartitionID, err)
 		return
 	}
 
 	// if the partition can be offline or not
-	if err = dp.canBeOffLine(offlineAddr, force); err != nil {
+	if err = dp.canBeOffLine(offlineAddr, raftForceDel); err != nil {
+		log.LogInfof("action[validateDecommissionDataPartition] dp vol %v dp %v err %v", dp.VolName, dp.PartitionID, err)
 		return
 	}
 
 	if dp.isRecover && !dp.activeUsedSimilar() {
 		err = fmt.Errorf("vol[%v],data partition[%v] is recovering,[%v] can't be decommissioned", vol.Name, dp.PartitionID, offlineAddr)
+		log.LogInfof("action[validateDecommissionDataPartition] dp vol %v dp %v err %v", dp.VolName, dp.PartitionID, err)
 		return
 	}
+	log.LogInfof("action[validateDecommissionDataPartition] dp vol %v dp %v looks fine!", dp.VolName, dp.PartitionID)
 	return
 }
 
@@ -1697,22 +1706,18 @@ func (c *Cluster) createDataReplica(dp *DataPartition, addPeer proto.Peer) (err 
 	return
 }
 
-func (c *Cluster) removeDataReplica(dp *DataPartition, addr string, validate bool, force bool) (err error) {
+func (c *Cluster) removeDataReplica(dp *DataPartition, addr string, validate bool, raftForceDel bool) (err error) {
 	defer func() {
 		if err != nil {
 			log.LogErrorf("action[removeDataReplica],vol[%v],data partition[%v],err[%v]", dp.VolName, dp.PartitionID, err)
 		}
 	}()
+
+	// validate be set true only in api call
 	if validate {
-		if err = c.validateDecommissionDataPartition(dp, addr, force); err != nil {
+		if err = c.validateDecommissionDataPartition(dp, addr, raftForceDel); err != nil {
 			return
 		}
-	}
-
-	ok := c.isRecovering(dp, addr)
-	if ok && !dp.activeUsedSimilar() {
-		err = fmt.Errorf("vol[%v],data partition[%v] can't decommision until it has recovered", dp.VolName, dp.PartitionID)
-		return
 	}
 
 	dataNode, err := c.dataNode(addr)
@@ -1721,7 +1726,7 @@ func (c *Cluster) removeDataReplica(dp *DataPartition, addr string, validate boo
 	}
 
 	removePeer := proto.Peer{ID: dataNode.ID, Addr: addr}
-	if err = c.removeDataPartitionRaftMember(dp, removePeer, force); err != nil {
+	if err = c.removeDataPartitionRaftMember(dp, removePeer, raftForceDel); err != nil {
 		return
 	}
 	if err = c.deleteDataReplica(dp, dataNode); err != nil {

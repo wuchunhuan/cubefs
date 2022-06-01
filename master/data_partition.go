@@ -206,7 +206,7 @@ func (partition *DataPartition) hasMissingOneReplica(addr string, replicaNum int
 	return
 }
 
-func (partition *DataPartition) canBeOffLine(offlineAddr string, force bool) (err error) {
+func (partition *DataPartition) canBeOffLine(offlineAddr string, raftForceDel bool) (err error) {
 	msg := fmt.Sprintf("action[canOffLine],partitionID:%v  RocksDBHost:%v  offLine:%v ",
 		partition.PartitionID, partition.Hosts, offlineAddr)
 	liveReplicas := partition.liveReplicas(defaultDataPartitionTimeOutSec)
@@ -232,9 +232,9 @@ func (partition *DataPartition) canBeOffLine(offlineAddr string, force bool) (er
 	}
 
 	if partition.ReplicaNum == 2 {
-		// raft quorum not take effect then do force delete replica
-		if force == true {
-			log.LogWarnf("action[canBeOffLine] force delete addr %v, liveReplicas:%v ", offlineAddr, len(liveReplicas))
+		// raft quorum not take effect then do raftForceDel delete replica
+		if raftForceDel {
+			log.LogWarnf("action[canBeOffLine] raftForceDel delete addr %v, liveReplicas:%v ", offlineAddr, len(liveReplicas))
 			return
 		}
 		if len(otherLiveReplicas) == 0 {

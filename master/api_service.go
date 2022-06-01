@@ -403,6 +403,7 @@ func (m *Server) deleteDataReplica(w http.ResponseWriter, r *http.Request) {
 		partitionID uint64
 		err         error
 		force       bool // now only used in two replicas in the scenario of no leader
+		raftForce   bool
 	)
 
 	if partitionID, addr, err = parseRequestToRemoveDataReplica(r); err != nil {
@@ -417,16 +418,20 @@ func (m *Server) deleteDataReplica(w http.ResponseWriter, r *http.Request) {
 
 	// force only be used in scenario that dp of two replicas volume no leader caused by one replica crash
 	var value string
-	if value = r.FormValue(forceKey); value != "" {
-		force, _ = strconv.ParseBool(value)
-		if force && dp.ReplicaNum != 2 {
+	if value = r.FormValue(raftForceDelKey); value != "" {
+		raftForce, _ = strconv.ParseBool(value)
+		if raftForce && dp.ReplicaNum != 2 {
 			msg = fmt.Sprintf("failed! replicaNum [%v] and force should be used in two replcias datapartition", dp.ReplicaNum)
 			sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: msg})
 			return
 		}
 	}
 
-	if err = m.cluster.removeDataReplica(dp, addr, true, force); err != nil {
+	if value = r.FormValue(forceKey); value != "" {
+		force, _ = strconv.ParseBool(value)
+	}
+
+	if err = m.cluster.removeDataReplica(dp, addr, !force, raftForce); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
