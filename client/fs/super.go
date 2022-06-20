@@ -94,13 +94,13 @@ func NewSuper(opt *proto.MountOptions) (s *Super, err error) {
 	s = new(Super)
 	var masters = strings.Split(opt.Master, meta.HostsSeparator)
 	var metaConfig = &meta.MetaConfig{
-		Volume:        opt.Volname,
-		Owner:         opt.Owner,
-		Masters:       masters,
-		Authenticate:  opt.Authenticate,
-		TicketMess:    opt.TicketMess,
-		ValidateOwner: opt.Authenticate || opt.AccessKey == "",
-		EnableSummary: opt.EnableSummary && opt.EnableXattr,
+		Volume:          opt.Volname,
+		Owner:           opt.Owner,
+		Masters:         masters,
+		Authenticate:    opt.Authenticate,
+		TicketMess:      opt.TicketMess,
+		ValidateOwner:   opt.Authenticate || opt.AccessKey == "",
+		EnableSummary:   opt.EnableSummary && opt.EnableXattr,
 		MetaSendTimeout: opt.MetaSendTimeout,
 	}
 	s.mw, err = meta.NewMetaWrapper(metaConfig)
@@ -139,6 +139,10 @@ func NewSuper(opt *proto.MountOptions) (s *Super, err error) {
 	if opt.MaxStreamerLimit > 0 {
 		DisableMetaCache = false
 		s.fsyncOnClose = false
+	}
+
+	if !(opt.MaxStreamerLimit > 0 && opt.EnableBcache) {
+		opt.EnableBcache = false
 	}
 
 	s.volType = opt.VolType
