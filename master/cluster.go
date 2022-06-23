@@ -1650,13 +1650,14 @@ func (c *Cluster) migrateDataPartition(srcAddr, targetAddr string, dp *DataParti
 		}
 	}
 
-	dp.Status = proto.ReadOnly
-	dp.isRecover = true
-	c.putBadDataPartitionIDs(replica, srcAddr, dp.PartitionID)
-
 	// if single replica wait for
 	if dp.isSingleReplica() {
 		newAddr = targetHosts[0]
+
+		dp.Status = proto.ReadOnly
+		dp.isRecover = true
+		c.putBadDataPartitionIDs(replica, srcAddr, dp.PartitionID)
+
 		if err = c.decommissionSingleDp(dp, newAddr, srcAddr); err != nil {
 			goto errHandler
 		}
@@ -1668,6 +1669,10 @@ func (c *Cluster) migrateDataPartition(srcAddr, targetAddr string, dp *DataParti
 		if err = c.addDataReplica(dp, newAddr); err != nil {
 			goto errHandler
 		}
+
+		dp.Status = proto.ReadOnly
+		dp.isRecover = true
+		c.putBadDataPartitionIDs(replica, srcAddr, dp.PartitionID)
 	}
 
 	dp.RLock()
