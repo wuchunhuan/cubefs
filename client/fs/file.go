@@ -216,14 +216,16 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 	log.LogDebugf("TRACE open ino(%v) info(%v)", ino, f.info)
 	start := time.Now()
 
-	parentPath := f.getParentPath()
-	if parentPath != "" && !strings.HasSuffix(parentPath, "/") {
-		parentPath = parentPath + "/"
+	if f.super.bcacheDir != "" {
+		parentPath := f.getParentPath()
+		if parentPath != "" && !strings.HasSuffix(parentPath, "/") {
+			parentPath = parentPath + "/"
+		}
+		if strings.HasPrefix(parentPath, f.super.bcacheDir) {
+			needBCache = true
+		}
 	}
-	if f.super.bcacheDir != "" && strings.HasPrefix(parentPath, f.super.bcacheDir) {
-		needBCache = true
-	}
-	log.LogDebugf("TRACE open ino(%v) parentPath(%v) f.super.bcacheDir(%v) needBCache(%v)", ino, parentPath, f.super.bcacheDir, needBCache)
+	log.LogDebugf("TRACE open ino(%v) f.super.bcacheDir(%v) needBCache(%v)", ino, f.super.bcacheDir, needBCache)
 
 	f.super.ec.OpenStream(ino, needBCache)
 

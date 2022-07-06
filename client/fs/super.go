@@ -157,6 +157,7 @@ func NewSuper(opt *proto.MountOptions) (s *Super, err error) {
 	if s.bcacheDir != "" && !strings.HasSuffix(s.bcacheDir, "/") {
 		s.bcacheDir = s.bcacheDir + "/"
 	}
+
 	s.volType = opt.VolType
 	s.ebsEndpoint = opt.EbsEndpoint
 	s.CacheAction = opt.CacheAction
