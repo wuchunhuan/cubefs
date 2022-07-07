@@ -225,9 +225,12 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 			needBCache = true
 		}
 	}
+	if needBCache {
+		f.super.ec.OpenStreamWithCache(ino, needBCache)
+	} else {
+		f.super.ec.OpenStream(ino)
+	}
 	log.LogDebugf("TRACE open ino(%v) f.super.bcacheDir(%v) needBCache(%v)", ino, f.super.bcacheDir, needBCache)
-
-	f.super.ec.OpenStream(ino, needBCache)
 
 	f.super.ec.RefreshExtentsCache(ino)
 
