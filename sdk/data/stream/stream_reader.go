@@ -44,10 +44,11 @@ type Streamer struct {
 	extents *ExtentCache
 	once    sync.Once
 
-	handler   *ExtentHandler   // current open handler
-	dirtylist *DirtyExtentList // dirty handlers
-	dirty     bool             // whether current open handler is in the dirty list
-	isOpen    bool
+	handler    *ExtentHandler   // current open handler
+	dirtylist  *DirtyExtentList // dirty handlers
+	dirty      bool             // whether current open handler is in the dirty list
+	isOpen     bool
+	needBCache bool
 
 	request chan interface{} // request channel, write/flush/close
 	done    chan struct{}    // stream writer is being closed
@@ -82,7 +83,7 @@ func (s *Streamer) String() string {
 
 // TODO should we call it RefreshExtents instead?
 func (s *Streamer) GetExtents() error {
-	if s.client.disableMetaCache {
+	if s.client.disableMetaCache || !s.needBCache {
 		return s.extents.RefreshForce(s.inode, s.client.getExtents)
 	}
 
@@ -170,9 +171,9 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 			total += req.Size
 			log.LogDebugf("Stream read hole: ino(%v) req(%v) total(%v)", s.inode, req, total)
 		} else {
-			//skip hole,ek is not nil,read bcache firstly
-			cacheKey := util.GenerateKey(s.client.volumeName, s.inode, req.ExtentKey.FileOffset)
-			if s.client.bcacheEnable && req.FileOffset <= bcache.MaxBlockSize {
+			//skip hole,ek is not nil,read block cache firstly
+			cacheKey := util.GenerateRepVolKey(s.client.volumeName, s.inode, req.ExtentKey.ExtentId, req.ExtentKey.FileOffset)
+			if s.client.bcacheEnable && s.needBCache && req.FileOffset <= bcache.MaxBlockSize {
 				//todo offset is ok for tinyextent?
 				offset := req.FileOffset - int(req.ExtentKey.FileOffset)
 				if s.client.loadBcache != nil {
@@ -193,7 +194,7 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 
 			// todo :  optimization
 			var needCache = false
-			if _, ok := s.inflightL1cache.Load(cacheKey); !ok && s.client.bcacheEnable {
+			if _, ok := s.inflightL1cache.Load(cacheKey); !ok && s.client.bcacheEnable && s.needBCache {
 				s.inflightL1cache.Store(cacheKey, true)
 				needCache = true
 			}

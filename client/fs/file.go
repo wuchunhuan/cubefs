@@ -17,6 +17,7 @@ package fs
 import (
 	"fmt"
 	"io"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -110,6 +111,28 @@ func NewFile(s *Super, i *proto.InodeInfo, flag uint32, pino uint64) fs.Node {
 	return &File{super: s, info: i, parentIno: pino}
 }
 
+//get file parentPath
+func (f *File) getParentPath() string {
+	filepath := ""
+	if f.parentIno == f.super.rootIno {
+		return "/"
+	}
+
+	f.super.fslock.Lock()
+	node, ok := f.super.nodeCache[f.parentIno]
+	f.super.fslock.Unlock()
+	if !ok {
+		log.LogErrorf("Get node cache failed: ino(%v)", f.parentIno)
+		return "unknown" + filepath
+	}
+	parentDir, ok := node.(*Dir)
+	if !ok {
+		log.LogErrorf("Type error: Can not convert node -> *Dir, ino(%v)", f.parentIno)
+		return "unknown" + filepath
+	}
+	return parentDir.getCwd() + filepath
+}
+
 // Attr sets the attributes of a file.
 func (f *File) Attr(ctx context.Context, a *fuse.Attr) error {
 	var err error
@@ -183,6 +206,8 @@ func (f *File) Forget() {
 // Open handles the open request.
 func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (handle fs.Handle, err error) {
 	bgTime := stat.BeginStat()
+	var needBCache bool
+
 	defer func() {
 		stat.EndStat("Open", err, bgTime, 1)
 	}()
@@ -191,7 +216,21 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 	log.LogDebugf("TRACE open ino(%v) info(%v)", ino, f.info)
 	start := time.Now()
 
-	f.super.ec.OpenStream(ino)
+	if f.super.bcacheDir != "" {
+		parentPath := f.getParentPath()
+		if parentPath != "" && !strings.HasSuffix(parentPath, "/") {
+			parentPath = parentPath + "/"
+		}
+		if strings.HasPrefix(parentPath, f.super.bcacheDir) {
+			needBCache = true
+		}
+	}
+	if needBCache {
+		f.super.ec.OpenStreamWithCache(ino, needBCache)
+	} else {
+		f.super.ec.OpenStream(ino)
+	}
+	log.LogDebugf("TRACE open ino(%v) f.super.bcacheDir(%v) needBCache(%v)", ino, f.super.bcacheDir, needBCache)
 
 	f.super.ec.RefreshExtentsCache(ino)
 
