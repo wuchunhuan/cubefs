@@ -221,6 +221,7 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 		if parentPath != "" && !strings.HasSuffix(parentPath, "/") {
 			parentPath = parentPath + "/"
 		}
+		log.LogDebugf("TRACE open ino(%v) parentPath(%v)", ino, parentPath)
 		if strings.HasPrefix(parentPath, f.super.bcacheDir) {
 			needBCache = true
 		}
