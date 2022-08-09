@@ -57,7 +57,7 @@ const (
 	CacheLimit   = "cacheLimit"
 	CacheFree    = "cacheFree"
 	BlockSize    = "blockSize"
-	MaxBlockSize = 8 << 20
+	MaxBlockSize = 32 << 20
 )
 
 var (
