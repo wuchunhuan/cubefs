@@ -270,6 +270,8 @@ func (dp *DataPartition) StartRaftAfterRepair() {
 				continue
 			}
 
+			dp.leaderSize = int(currLeaderPartitionSize)
+
 			if currLeaderPartitionSize < initPartitionSize {
 				initPartitionSize = currLeaderPartitionSize
 			}

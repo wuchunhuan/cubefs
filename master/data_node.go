@@ -34,6 +34,7 @@ type DataNode struct {
 	ZoneName                  string `json:"Zone"`
 	Addr                      string
 	ReportTime                time.Time
+	LastUpdateTime            time.Time
 	isActive                  bool
 	sync.RWMutex              `graphql:"-"`
 	UsageRatio                float64           // used / total space
@@ -56,6 +57,7 @@ func newDataNode(addr, zoneName, clusterID string) (dataNode *DataNode) {
 	dataNode.Total = 1
 	dataNode.Addr = addr
 	dataNode.ZoneName = zoneName
+	dataNode.LastUpdateTime = time.Now().Add(-time.Minute)
 	dataNode.TaskManager = newAdminTaskManager(dataNode.Addr, clusterID)
 	return
 }
@@ -90,7 +92,11 @@ func (dataNode *DataNode) updateNodeMetric(resp *proto.DataNodeHeartbeatResponse
 	defer dataNode.Unlock()
 	dataNode.Total = resp.Total
 	dataNode.Used = resp.Used
-	dataNode.AvailableSpace = resp.Available
+	if dataNode.AvailableSpace > resp.Available ||
+		time.Since(dataNode.LastUpdateTime) > defaultNodeTimeOutSec*time.Second {
+		dataNode.AvailableSpace = resp.Available
+		dataNode.LastUpdateTime = time.Now()
+	}
 	dataNode.ZoneName = resp.ZoneName
 	dataNode.DataPartitionCount = resp.CreatedPartitionCnt
 	dataNode.DataPartitionReports = resp.PartitionReports
