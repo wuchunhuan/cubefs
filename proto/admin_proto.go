@@ -160,6 +160,7 @@ type CreateDataPartitionRequest struct {
 	Members       []Peer
 	Hosts         []string
 	CreateType    int
+	LeaderSize    int
 }
 
 // CreateDataPartitionResponse defines the response to the request of creating a data partition.

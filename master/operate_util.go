@@ -19,16 +19,17 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"strings"
+	"time"
+
 	"github.com/cubefs/cubefs/proto"
 	"github.com/cubefs/cubefs/util/errors"
 	"github.com/cubefs/cubefs/util/exporter"
 	"github.com/cubefs/cubefs/util/log"
-	"math/rand"
-	"strings"
-	"time"
 )
 
-func newCreateDataPartitionRequest(volName string, ID uint64, replicaNum int, members []proto.Peer, dataPartitionSize int, hosts []string, createType int) (req *proto.CreateDataPartitionRequest) {
+func newCreateDataPartitionRequest(volName string, ID uint64, replicaNum int, members []proto.Peer, dataPartitionSize, leaderSize int, hosts []string, createType int) (req *proto.CreateDataPartitionRequest) {
 	req = &proto.CreateDataPartitionRequest{
 		PartitionId:   ID,
 		PartitionSize: dataPartitionSize,
@@ -37,6 +38,7 @@ func newCreateDataPartitionRequest(volName string, ID uint64, replicaNum int, me
 		Members:       members,
 		Hosts:         hosts,
 		CreateType:    createType,
+		LeaderSize:    leaderSize,
 	}
 	return
 }
