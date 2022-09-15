@@ -195,6 +195,8 @@ func (m *Server) Start(cfg *config.Config) (err error) {
 		log.LogErrorf("Start: init RocksDB fail: err(%v)", err)
 		return
 	}
+
+	raftstore.SetMonitorConf(cfg)
 	if err = m.createRaftServer(); err != nil {
 		log.LogError(errors.Stack(err))
 		return

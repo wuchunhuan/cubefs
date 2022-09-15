@@ -146,6 +146,7 @@ func (m *Server) Start(cfg *config.Config) (err error) {
 		return
 	}
 
+	raftstore.SetMonitorConf(cfg)
 	if err = m.createRaftServer(); err != nil {
 		log.LogError(errors.Stack(err))
 		return

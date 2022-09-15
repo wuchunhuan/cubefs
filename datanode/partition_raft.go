@@ -504,6 +504,7 @@ func (s *DataNode) startRaftServer(cfg *config.Config) (err error) {
 	log.LogInfo("Start: startRaftServer")
 
 	s.parseRaftConfig(cfg)
+	raftstore.SetMonitorConf(cfg)
 
 	constCfg := config.ConstConfig{
 		Listen:           s.port,
