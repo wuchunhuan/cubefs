@@ -504,7 +504,6 @@ func (s *DataNode) startRaftServer(cfg *config.Config) (err error) {
 	log.LogInfo("Start: startRaftServer")
 
 	s.parseRaftConfig(cfg)
-	raftstore.SetMonitorConf(cfg)
 
 	constCfg := config.ConstConfig{
 		Listen:           s.port,
@@ -546,7 +545,7 @@ func (s *DataNode) startRaftServer(cfg *config.Config) (err error) {
 		TickInterval:      s.tickInterval,
 		RecvBufSize:       s.raftRecvBufSize,
 	}
-	s.raftStore, err = raftstore.NewRaftStore(raftConf)
+	s.raftStore, err = raftstore.NewRaftStore(raftConf, cfg)
 	if err != nil {
 		err = errors.NewErrorf("new raftStore: %s", err.Error())
 		log.LogErrorf("action[startRaftServer] cannot start raft server err(%v)", err)

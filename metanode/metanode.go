@@ -122,8 +122,7 @@ func doStart(s common.Server, cfg *config.Config) (err error) {
 		return
 	}
 
-	raftstore.SetMonitorConf(cfg)
-	if err = m.startRaftServer(); err != nil {
+	if err = m.startRaftServer(cfg); err != nil {
 		return
 	}
 	if err = m.newMetaManager(); err != nil {

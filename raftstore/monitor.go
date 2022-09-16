@@ -36,7 +36,11 @@ var gMonConf = monitorConf{
 	NoLeaderTooLongThreshold: defaultReportDuration,
 }
 
-func SetMonitorConf(cfg *config.Config) {
+func setMonitorConf(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+
 	cfgZomThr := cfg.GetInt64(cfgZombieThresholdSec)
 	if cfgZomThr > 0 {
 		gMonConf.ZombieThreshold = time.Second * time.Duration(cfgZomThr)
