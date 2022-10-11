@@ -227,6 +227,8 @@ func autoPush(pushAddr, role, cluster, ip, mountPoint string) {
 		Grouping("dataset", "custom").
 		Grouping("category", "custom").
 		Grouping("app", AppName).
+		Grouping("dataset", "custom").
+		Grouping("category", "custom").
 		Grouping("mountPoint", mountPoint).
 		Grouping("hostName", hostname)
 
