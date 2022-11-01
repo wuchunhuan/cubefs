@@ -23,7 +23,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/cubefs/cubefs/blockcache/bcache"
 	"io/ioutil"
 	syslog "log"
 	"net"
@@ -39,22 +38,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cubefs/cubefs/util/buf"
-
-	"github.com/cubefs/cubefs/sdk/master"
-	"github.com/cubefs/cubefs/util"
-
-	sysutil "github.com/cubefs/cubefs/util/sys"
-
+	"github.com/cubefs/cubefs/blockcache/bcache"
 	cfs "github.com/cubefs/cubefs/client/fs"
 	"github.com/cubefs/cubefs/depends/bazil.org/fuse"
 	"github.com/cubefs/cubefs/depends/bazil.org/fuse/fs"
 	"github.com/cubefs/cubefs/proto"
+	"github.com/cubefs/cubefs/sdk/master"
+	"github.com/cubefs/cubefs/util"
+	"github.com/cubefs/cubefs/util/buf"
 	"github.com/cubefs/cubefs/util/config"
 	"github.com/cubefs/cubefs/util/errors"
 	"github.com/cubefs/cubefs/util/exporter"
 	"github.com/cubefs/cubefs/util/log"
 	"github.com/cubefs/cubefs/util/stat"
+	sysutil "github.com/cubefs/cubefs/util/sys"
 	"github.com/cubefs/cubefs/util/ump"
 	"github.com/jacobsa/daemonize"
 	_ "go.uber.org/automaxprocs"
@@ -402,6 +399,7 @@ func main() {
 		_ = daemonize.SignalOutcome(nil)
 	}
 	defer fsConn.Close()
+	defer super.Close()
 
 	syslog.Printf("enable bcache %v", opt.EnableBcache)
 
@@ -697,6 +695,9 @@ func parseMountOption(cfg *config.Config) (*proto.MountOptions, error) {
 	opt.WriteThreads = GlobalMountOptions[proto.WriteThreads].GetInt64()
 	opt.BcacheDir = GlobalMountOptions[proto.BcacheDir].GetString()
 	//opt.EnableBcache = GlobalMountOptions[proto.EnableBcache].GetBool()
+	opt.BcacheFilterFiles = GlobalMountOptions[proto.BcacheFilterFiles].GetString()
+	opt.BcacheBatchCnt = GlobalMountOptions[proto.BcacheBatchCnt].GetInt64()
+	opt.BcacheCheckIntervalS = GlobalMountOptions[proto.BcacheCheckIntervalS].GetInt64()
 	if _, err := os.Stat(bcache.UnixSocketPath); err == nil && opt.BcacheDir != "" {
 		opt.EnableBcache = true
 	}
