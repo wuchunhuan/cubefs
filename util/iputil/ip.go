@@ -16,6 +16,7 @@ package iputil
 
 import (
 	"errors"
+	"github.com/cubefs/cubefs/util/log"
 	"net"
 	"net/http"
 	"strings"
@@ -81,6 +82,7 @@ func FromRequest(r *http.Request) string {
 			remoteIP = r.RemoteAddr
 		}
 
+		log.LogDebugf("Get ip[%v] from RemoteAddr", remoteIP)
 		return remoteIP
 	}
 
@@ -89,11 +91,13 @@ func FromRequest(r *http.Request) string {
 		address = strings.TrimSpace(address)
 		isPrivate, err := isPrivateAddress(address)
 		if !isPrivate && err == nil {
+			log.LogDebugf("Get ip[%v] from X-Forwarded-For, RemoteAddr[%v]", address, r.RemoteAddr)
 			return address
 		}
 	}
 
 	// If nothing succeed, return X-Real-IP
+	log.LogDebugf("Get ip[%v] from X-Real-Ip, RemoteAddr[%v]", xRealIP, r.RemoteAddr)
 	return xRealIP
 }
 

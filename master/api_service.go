@@ -17,6 +17,7 @@ package master
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/cubefs/cubefs/util/iputil"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -249,7 +250,7 @@ func (m *Server) getIPAddr(w http.ResponseWriter, r *http.Request) {
 		MetaNodeDeleteWorkerSleepMs: deleteSleepMs,
 		DataNodeDeleteLimitRate:     limitRate,
 		DataNodeAutoRepairLimitRate: autoRepairRate,
-		Ip:                          strings.Split(r.RemoteAddr, ":")[0],
+		Ip:                          iputil.RealIP(r),
 		AuditAddr:                   m.auditAddr,
 		AuditKey:                    m.auditKey,
 	}
