@@ -409,7 +409,7 @@ func (mp *MetaPartition) getLiveReplicas() (liveReplicas []*MetaReplica) {
 	return
 }
 
-func (mp *MetaPartition) checkReplicas() () {
+func (mp *MetaPartition) checkReplicas() {
 	for _, mr := range mp.Replicas {
 		if !mr.isActive() {
 			mr.Status = proto.Unavailable
