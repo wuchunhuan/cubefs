@@ -17,12 +17,13 @@ package master
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/cubefs/cubefs/util/iputil"
 	"net/http"
 	"regexp"
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/cubefs/cubefs/util/iputil"
 
 	"bytes"
 	"io/ioutil"
@@ -2814,7 +2815,7 @@ func sendErrReply(w http.ResponseWriter, r *http.Request, httpReply *proto.HTTPR
 	log.LogInfof("URL[%v],remoteAddr[%v],response err[%v]", r.URL, r.RemoteAddr, httpReply)
 	reply, err := json.Marshal(httpReply)
 	if err != nil {
-		log.LogErrorf("fail to marshal http reply[%v]. URL[%v],remoteAddr[%v] err:[%v]", httpReply, r.URL, r.RemoteAddr, err)
+		log.LogErrorf("fail to marshal http reply, len[%d]. URL[%v],remoteAddr[%v] err:[%v]", len(reply), r.URL, r.RemoteAddr, err)
 		http.Error(w, "fail to marshal http reply", http.StatusBadRequest)
 		return
 	}
