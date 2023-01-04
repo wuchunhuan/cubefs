@@ -34,6 +34,18 @@ const (
 	MaxUsedMemFactor = 1.1
 )
 
+func (m *metadataManager) checkFollowerRead(volNames []string, partition MetaPartition) {
+	volName := partition.GetBaseConfig().VolName
+	for _, name := range volNames {
+		if name == volName {
+			partition.SetFollowerRead(true)
+			return
+		}
+	}
+	partition.SetFollowerRead(false)
+	return
+}
+
 func (m *metadataManager) opMasterHeartbeat(conn net.Conn, p *Packet,
 	remoteAddr string) (err error) {
 	// For ack to master
@@ -66,6 +78,7 @@ func (m *metadataManager) opMasterHeartbeat(conn net.Conn, p *Packet,
 		}
 
 		m.Range(func(id uint64, partition MetaPartition) bool {
+			m.checkFollowerRead(req.FLReadVols, partition)
 			mConf := partition.GetBaseConfig()
 			mpr := &proto.MetaPartitionReport{
 				PartitionID: mConf.PartitionId,
@@ -389,7 +402,7 @@ func (m *metadataManager) opReadDirOnly(conn net.Conn, p *Packet,
 		err = errors.NewErrorf("[%v],req[%v],err[%v]", p.GetOpMsgWithReqAndResult(), req, string(p.Data))
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.ReadDirOnly(req, p)
@@ -416,7 +429,7 @@ func (m *metadataManager) opReadDir(conn net.Conn, p *Packet,
 		err = errors.NewErrorf("[%v],req[%v],err[%v]", p.GetOpMsgWithReqAndResult(), req, string(p.Data))
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.ReadDir(req, p)
@@ -443,7 +456,7 @@ func (m *metadataManager) opReadDirLimit(conn net.Conn, p *Packet,
 		err = errors.NewErrorf("[%v],req[%v],err[%v]", p.GetOpMsgWithReqAndResult(), req, string(p.Data))
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.ReadDirLimit(req, p)
@@ -469,7 +482,7 @@ func (m *metadataManager) opMetaInodeGet(conn net.Conn, p *Packet,
 		err = errors.NewErrorf("[%v],req[%v],err[%v]", p.GetOpMsgWithReqAndResult(), req, string(p.Data))
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	if err = mp.InodeGet(req, p); err != nil {
@@ -586,7 +599,7 @@ func (m *metadataManager) opMetaLookup(conn net.Conn, p *Packet,
 		err = errors.NewErrorf("[%v] req: %v, resp: %v", p.GetOpMsgWithReqAndResult(), req, err.Error())
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.Lookup(req, p)
@@ -673,7 +686,7 @@ func (m *metadataManager) opMetaExtentsList(conn net.Conn, p *Packet,
 		err = errors.NewErrorf("[%v] req: %v, resp: %v", p.GetOpMsgWithReqAndResult(), req, err.Error())
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 
@@ -700,7 +713,7 @@ func (m *metadataManager) opMetaObjExtentsList(conn net.Conn, p *Packet,
 		err = errors.NewErrorf("[%v] req: %v, resp: %v", p.GetOpMsgWithReqAndResult(), req, err.Error())
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 
@@ -1122,7 +1135,7 @@ func (m *metadataManager) opMetaBatchInodeGet(conn net.Conn, p *Packet,
 		err = errors.NewErrorf("[%v] req: %v, resp: %v", p.GetOpMsgWithReqAndResult(), req, err.Error())
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.InodeGetBatch(req, p)
@@ -1270,7 +1283,7 @@ func (m *metadataManager) opMetaGetXAttr(conn net.Conn, p *Packet, remoteAddr st
 		err = errors.NewErrorf("[%v] req: %v, resp: %v", p.GetOpMsgWithReqAndResult(), req, err.Error())
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.GetXAttr(req, p)
@@ -1295,7 +1308,7 @@ func (m *metadataManager) opMetaBatchGetXAttr(conn net.Conn, p *Packet, remoteAd
 		err = errors.NewErrorf("[%v] req: %v, resp: %v", p.GetOpMsgWithReqAndResult(), req, err.Error())
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.BatchGetXAttr(req, p)
@@ -1345,7 +1358,7 @@ func (m *metadataManager) opMetaListXAttr(conn net.Conn, p *Packet, remoteAddr s
 		err = errors.NewErrorf("[%v] req: %v, resp: %v", p.GetOpMsgWithReqAndResult(), req, err.Error())
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.ListXAttr(req, p)
@@ -1467,7 +1480,7 @@ func (m *metadataManager) opGetMultipart(conn net.Conn, p *Packet, remote string
 		err = errors.NewErrorf("[opGetMultipart] req: %v, resp: %v", req, err.Error())
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.GetMultipart(req, p)
@@ -1488,7 +1501,7 @@ func (m *metadataManager) opAppendMultipart(conn net.Conn, p *Packet, remote str
 		m.respondToClient(conn, p)
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.AppendMultipart(req, p)
@@ -1511,7 +1524,7 @@ func (m *metadataManager) opListMultipart(conn net.Conn, p *Packet, remote strin
 		err = errors.NewErrorf("[opListMultipart] req: %v, resp: %v", req, err.Error())
 		return
 	}
-	if !m.serveProxy(conn, mp, p) {
+	if !mp.IsFollowerRead() && !m.serveProxy(conn, mp, p) {
 		return
 	}
 	err = mp.ListMultipart(req, p)

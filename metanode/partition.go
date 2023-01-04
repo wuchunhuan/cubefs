@@ -184,6 +184,8 @@ type OpMeta interface {
 // OpPartition defines the interface for the partition operations.
 type OpPartition interface {
 	IsLeader() (leaderAddr string, isLeader bool)
+	IsFollowerRead() bool
+	SetFollowerRead(bool)
 	GetCursor() uint64
 	GetBaseConfig() MetaPartitionConfig
 	ResponseLoadMetaPartition(p *Packet) (err error)
@@ -237,6 +239,7 @@ type metaPartition struct {
 	summaryLock            sync.Mutex
 	ebsClient              *blobstore.BlobStoreClient
 	volType                int
+	isFollowerRead         bool
 	xattrLock              sync.Mutex
 }
 
@@ -489,6 +492,23 @@ func NewMetaPartition(conf *MetaPartitionConfig, manager *metadataManager) MetaP
 		manager:       manager,
 	}
 	return mp
+}
+
+// IsLeader returns the raft leader address and if the current meta partition is the leader.
+func (mp *metaPartition) SetFollowerRead(fRead bool) {
+	if mp.raftPartition == nil {
+		return
+	}
+	mp.isFollowerRead = fRead
+	return
+}
+
+// IsLeader returns the raft leader address and if the current meta partition is the leader.
+func (mp *metaPartition) IsFollowerRead() (ok bool) {
+	if mp.raftPartition == nil {
+		return
+	}
+	return mp.isFollowerRead
 }
 
 // IsLeader returns the raft leader address and if the current meta partition is the leader.
