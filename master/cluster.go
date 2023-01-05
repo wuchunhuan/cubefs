@@ -1610,7 +1610,7 @@ func (c *Cluster) migrateDataPartition(srcAddr, targetAddr string, dp *DataParti
 		excludeNodeSets []uint64
 		zones           []string
 	)
-	log.LogDebugf("[migrateDataPartition] src %v target %v raftForce %v", srcAddr, targetAddr,raftForce)
+	log.LogDebugf("[migrateDataPartition] src %v target %v raftForce %v", srcAddr, targetAddr, raftForce)
 	dp.RLock()
 	if ok := dp.hasHost(srcAddr); !ok {
 		dp.RUnlock()
@@ -1720,7 +1720,7 @@ func (c *Cluster) migrateDataPartition(srcAddr, targetAddr string, dp *DataParti
 		dp.isRecover = true
 		c.putBadDataPartitionIDs(replica, srcAddr, dp.PartitionID)
 	}
-	log.LogDebugf("[migrateDataPartition] src %v target %v raftForce %v", srcAddr, targetAddr,raftForce)
+	log.LogDebugf("[migrateDataPartition] src %v target %v raftForce %v", srcAddr, targetAddr, raftForce)
 	dp.RLock()
 	c.syncUpdateDataPartition(dp)
 	dp.RUnlock()
