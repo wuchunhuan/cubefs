@@ -1,4 +1,4 @@
-// Copyright 2018 The CubeFS Authors.
+// Copyright 2018 The Chubao Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -169,12 +169,12 @@ func (s *Streamer) IssueEvictRequest() error {
 func (s *Streamer) server() {
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
-	defer func() {
-		if !s.client.disableMetaCache {
-			close(s.request)
-			s.request = nil
-		}
-	}()
+	//defer func() {
+	//	if !s.client.disableMetaCache && s.needBCache {
+	//		close(s.request)
+	//		s.request = nil
+	//	}
+	//}()
 
 	for {
 		select {
@@ -192,7 +192,7 @@ func (s *Streamer) server() {
 
 				s.client.streamerLock.Lock()
 				if s.idle >= streamWriterIdleTimeoutPeriod && len(s.request) == 0 {
-					if s.client.disableMetaCache {
+					if s.client.disableMetaCache || !s.needBCache {
 						delete(s.client.streamers, s.inode)
 						if s.client.evictIcache != nil {
 							s.client.evictIcache(s.inode)
@@ -200,10 +200,10 @@ func (s *Streamer) server() {
 					}
 
 					s.isOpen = false
-					s.client.streamerLock.Unlock()
-
 					// fail the remaining requests in such case
 					s.clearRequests()
+					s.client.streamerLock.Unlock()
+
 					log.LogDebugf("done server: no requests for a long time, ino(%v)", s.inode)
 					return
 				}
@@ -290,10 +290,6 @@ func (s *Streamer) write(data []byte, offset, size, flags int) (total int, err e
 	ctx := context.Background()
 	s.client.writeLimiter.Wait(ctx)
 
-	if flags&proto.FlagsCache == 0 {
-		s.client.LimitManager.WriteAlloc(ctx, size)
-	}
-
 	requests := s.extents.PrepareWriteRequests(offset, size, data)
 	log.LogDebugf("Streamer write: ino(%v) prepared requests(%v)", s.inode, requests)
 
@@ -315,14 +311,17 @@ func (s *Streamer) write(data []byte, offset, size, flags int) (total int, err e
 		var writeSize int
 		if req.ExtentKey != nil {
 			writeSize, err = s.doOverwrite(req, direct)
-			cacheKey := util.GenerateRepVolKey(s.client.volumeName, s.inode, req.ExtentKey.ExtentId, req.ExtentKey.FileOffset)
-			if _, ok := s.inflightEvictL1cache.Load(cacheKey); !ok && s.client.bcacheEnable {
-				go func(cacheKey string) {
-					s.inflightEvictL1cache.Store(cacheKey, true)
-					s.client.evictBcache(cacheKey)
-					s.inflightEvictL1cache.Delete(cacheKey)
-				}(cacheKey)
+			if s.client.bcacheEnable {
+				cacheKey := util.GenerateRepVolKey(s.client.volumeName, s.inode, req.ExtentKey.PartitionId, req.ExtentKey.ExtentId, uint64(req.FileOffset))
+				if _, ok := s.inflightEvictL1cache.Load(cacheKey); !ok {
+					go func(cacheKey string) {
+						s.inflightEvictL1cache.Store(cacheKey, true)
+						s.client.evictBcache(cacheKey)
+						s.inflightEvictL1cache.Delete(cacheKey)
+					}(cacheKey)
+				}
 			}
+
 		} else {
 			writeSize, err = s.doWrite(req.Data, req.FileOffset, req.Size, direct)
 		}
@@ -639,7 +638,7 @@ func (s *Streamer) evict() error {
 		s.client.streamerLock.Unlock()
 		return errors.New(fmt.Sprintf("evict: streamer(%v) refcnt(%v)", s, s.refcnt))
 	}
-	if s.client.disableMetaCache {
+	if s.client.disableMetaCache || !s.needBCache {
 		delete(s.client.streamers, s.inode)
 	}
 	s.client.streamerLock.Unlock()

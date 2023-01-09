@@ -40,7 +40,7 @@ type TruncateFunc func(inode, size uint64) error
 type EvictIcacheFunc func(inode uint64)
 type LoadBcacheFunc func(key string, buf []byte, offset uint64, size uint32) (int, error)
 type CacheBcacheFunc func(key string, buf []byte) error
-type EvictBacheFunc func(key string)
+type EvictBacheFunc func(key string) error
 
 const (
 	MaxMountRetryLimit = 5
@@ -300,15 +300,6 @@ func (client *ExtentClient) OpenStream(inode uint64) error {
 	if !ok {
 		s = NewStreamer(client, inode)
 		client.streamers[inode] = s
-		if !client.disableMetaCache {
-			client.streamerList.PushFront(inode)
-		}
-	}
-	if !s.isOpen && !client.disableMetaCache {
-		s.isOpen = true
-		log.LogDebugf("open stream again, ino(%v)", s.inode)
-		s.request = make(chan interface{}, 64)
-		go s.server()
 	}
 	return s.IssueOpenRequest()
 }
@@ -320,7 +311,7 @@ func (client *ExtentClient) OpenStreamWithCache(inode uint64, needBCache bool) e
 	if !ok {
 		s = NewStreamer(client, inode)
 		client.streamers[inode] = s
-		if !client.disableMetaCache {
+		if !client.disableMetaCache && needBCache {
 			client.streamerList.PushFront(inode)
 		}
 	}
@@ -375,6 +366,32 @@ func (client *ExtentClient) RefreshExtentsCache(inode uint64) error {
 		return nil
 	}
 	return s.GetExtents()
+}
+
+//
+func (client *ExtentClient) ForceRefreshExtentsCache(inode uint64) error {
+	s := client.GetStreamer(inode)
+	if s == nil {
+		return nil
+	}
+	return s.GetExtentsForce()
+}
+
+// GetExtentCacheGen return extent generation
+func (client *ExtentClient) GetExtentCacheGen(inode uint64) uint64 {
+	s := client.GetStreamer(inode)
+	if s == nil {
+		return 0
+	}
+	return s.extents.gen
+}
+
+func (client *ExtentClient) GetExtents(inode uint64) []*proto.ExtentKey {
+	s := client.GetStreamer(inode)
+	if s == nil {
+		return nil
+	}
+	return s.extents.List()
 }
 
 // FileSize returns the file size.
