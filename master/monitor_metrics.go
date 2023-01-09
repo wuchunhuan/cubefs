@@ -41,27 +41,38 @@ const (
 	MetricVolMetaCount         = "vol_meta_count"
 	MetricDiskError            = "disk_error"
 	MetricDataNodesInactive    = "dataNodes_inactive"
+	MetricInactiveDataNodeInfo = "inactive_dataNodes_info"
 	MetricMetaNodesInactive    = "metaNodes_inactive"
+	MetricInactiveMataNodeInfo = "inactive_mataNodes_info"
+
+	MetricMissingDp  = "missing_dp"
+	MetricDpNoLeader = "dp_no_leader"
+	MetricMissingMp  = "missing_mp"
+	MetricMpNoLeader = "mp_no_leader"
 )
 
+var WarnMetrics *warningMetrics
+
 type monitorMetrics struct {
-	cluster            *Cluster
-	dataNodesCount     *exporter.Gauge
-	metaNodesCount     *exporter.Gauge
-	volCount           *exporter.Gauge
-	dataNodesTotal     *exporter.Gauge
-	dataNodesUsed      *exporter.Gauge
-	dataNodeIncreased  *exporter.Gauge
-	metaNodesTotal     *exporter.Gauge
-	metaNodesUsed      *exporter.Gauge
-	metaNodesIncreased *exporter.Gauge
-	volTotalSpace      *exporter.GaugeVec
-	volUsedSpace       *exporter.GaugeVec
-	volUsage           *exporter.GaugeVec
-	volMetaCount       *exporter.GaugeVec
-	diskError          *exporter.GaugeVec
-	dataNodesInactive  *exporter.Gauge
-	metaNodesInactive  *exporter.Gauge
+	cluster              *Cluster
+	dataNodesCount       *exporter.Gauge
+	metaNodesCount       *exporter.Gauge
+	volCount             *exporter.Gauge
+	dataNodesTotal       *exporter.Gauge
+	dataNodesUsed        *exporter.Gauge
+	dataNodeIncreased    *exporter.Gauge
+	metaNodesTotal       *exporter.Gauge
+	metaNodesUsed        *exporter.Gauge
+	metaNodesIncreased   *exporter.Gauge
+	volTotalSpace        *exporter.GaugeVec
+	volUsedSpace         *exporter.GaugeVec
+	volUsage             *exporter.GaugeVec
+	volMetaCount         *exporter.GaugeVec
+	diskError            *exporter.GaugeVec
+	dataNodesInactive    *exporter.Gauge
+	InactiveDataNodeInfo *exporter.GaugeVec
+	metaNodesInactive    *exporter.Gauge
+	InactiveMataNodeInfo *exporter.GaugeVec
 
 	volNames map[string]struct{}
 	badDisks map[string]string
@@ -73,6 +84,40 @@ func newMonitorMetrics(c *Cluster) *monitorMetrics {
 		volNames: make(map[string]struct{}),
 		badDisks: make(map[string]string),
 	}
+}
+
+type warningMetrics struct {
+	cluster    *Cluster
+	missingDp  *exporter.GaugeVec
+	dpNoLeader *exporter.GaugeVec
+	missingMp  *exporter.GaugeVec
+	mpNoLeader *exporter.GaugeVec
+}
+
+func newWarningMetrics(c *Cluster) *warningMetrics {
+	return &warningMetrics{
+		cluster:    c,
+		missingDp:  exporter.NewGaugeVec(MetricMissingDp, "", []string{"clusterName", "partitionID", "addr"}),
+		dpNoLeader: exporter.NewGaugeVec(MetricDpNoLeader, "", []string{"clusterName", "partitionID"}),
+		missingMp:  exporter.NewGaugeVec(MetricMissingMp, "", []string{"clusterName", "partitionID", "addr"}),
+		mpNoLeader: exporter.NewGaugeVec(MetricMpNoLeader, "", []string{"clusterName", "partitionID"}),
+	}
+}
+
+func (m *warningMetrics) WarnMissingDp(clusterName, addr string, partitionID uint64) {
+	m.missingDp.SetWithLabelValues(1, clusterName, strconv.FormatUint(partitionID, 10), addr)
+}
+
+func (m *warningMetrics) WarnDpNoLeader(clusterName string, partitionID uint64) {
+	m.dpNoLeader.SetWithLabelValues(1, clusterName, strconv.FormatUint(partitionID, 10))
+}
+
+func (m *warningMetrics) WarnMissingMp(clusterName, addr string, partitionID uint64) {
+	m.missingMp.SetWithLabelValues(1, clusterName, strconv.FormatUint(partitionID, 10), addr)
+}
+
+func (m *warningMetrics) WarnMpNoLeader(clusterName string, partitionID uint64) {
+	m.mpNoLeader.SetWithLabelValues(1, clusterName, strconv.FormatUint(partitionID, 10))
 }
 
 func (mm *monitorMetrics) start() {
@@ -91,7 +136,9 @@ func (mm *monitorMetrics) start() {
 	mm.volMetaCount = exporter.NewGaugeVec(MetricVolMetaCount, "", []string{"volName", "type"})
 	mm.diskError = exporter.NewGaugeVec(MetricDiskError, "", []string{"addr", "path"})
 	mm.dataNodesInactive = exporter.NewGauge(MetricDataNodesInactive)
+	mm.InactiveDataNodeInfo = exporter.NewGaugeVec(MetricInactiveDataNodeInfo, "", []string{"clusterName", "addr"})
 	mm.metaNodesInactive = exporter.NewGauge(MetricMetaNodesInactive)
+	mm.InactiveMataNodeInfo = exporter.NewGaugeVec(MetricInactiveMataNodeInfo, "", []string{"clusterName", "addr"})
 	go mm.statMetrics()
 }
 
@@ -239,6 +286,7 @@ func (mm *monitorMetrics) setInactiveMetaNodesCount() {
 		}
 		if !metaNode.IsActive {
 			inactiveMetaNodesCount++
+			mm.InactiveMataNodeInfo.SetWithLabelValues(1, mm.cluster.Name, metaNode.Addr)
 		}
 		return true
 	})
@@ -254,6 +302,7 @@ func (mm *monitorMetrics) setInactiveDataNodesCount() {
 		}
 		if !dataNode.isActive {
 			inactiveDataNodesCount++
+			mm.InactiveDataNodeInfo.SetWithLabelValues(1, mm.cluster.Name, dataNode.Addr)
 		}
 		return true
 	})
