@@ -145,7 +145,7 @@ const (
 
 const (
 	TimeFormat                 = "2006-01-02 15:04:05"
-	DefaultDirChildrenNumLimit = 10000000
+	DefaultDirChildrenNumLimit = 20000000
 	MinDirChildrenNumLimit     = 10000
 )
 
