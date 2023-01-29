@@ -125,6 +125,9 @@ func (st *Statistic) flushScheduler() {
 	lastStatTime := time.Now()
 	statGap := time.Duration(DefaultStatInterval)
 	for {
+		if gSt.closeStat {
+			return
+		}
 		if time.Since(lastStatTime) < (statGap * time.Second) {
 			time.Sleep(1 * time.Second)
 			continue

@@ -88,6 +88,8 @@ const (
 	ClientReqPeriod         = "reqPeriod"
 	ClientTriggerCnt        = "triggerCnt"
 	QosMasterLimit          = "qosLimit"
+	Limit                   = "limit"
+	TimeOut                 = "timeout"
 )
 
 const (
@@ -207,6 +209,7 @@ const (
 	opSyncExclueDomain         uint32 = 0x23
 	opSyncUpdateZone           uint32 = 0x24
 	opSyncAllocClientID        uint32 = 0x25
+	opSyncPutApiLimiterInfo    uint32 = 0x26
 )
 
 const (
@@ -222,6 +225,7 @@ const (
 	nodeSetGrpAcronym     = "g"
 	zoneAcronym           = "zone"
 	domainAcronym         = "zoneDomain"
+	apiLimiterAcronym     = "al"
 	maxDataPartitionIDKey = keySeparator + "max_dp_id"
 	maxMetaPartitionIDKey = keySeparator + "max_mp_id"
 	maxCommonIDKey        = keySeparator + "max_common_id"
@@ -236,6 +240,7 @@ const (
 	nodeSetGrpPrefix      = keySeparator + nodeSetGrpAcronym + keySeparator
 	DomainPrefix          = keySeparator + domainAcronym + keySeparator
 	zonePrefix            = keySeparator + zoneAcronym + keySeparator
+	apiLimiterPrefix      = keySeparator + apiLimiterAcronym + keySeparator
 	akAcronym             = "ak"
 	userAcronym           = "user"
 	volUserAcronym        = "voluser"
