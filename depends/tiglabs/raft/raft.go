@@ -357,13 +357,14 @@ func (s *raft) run() {
 			}
 
 		case <-s.electc:
-			msg := proto.GetMessage()
-			msg.Type = proto.LocalMsgHup
-			msg.From = s.config.NodeID
-			msg.ForceVote = true
-			s.raftFsm.Step(msg)
-			s.maybeChange(true)
-
+			if false {
+				msg := proto.GetMessage()
+				msg.Type = proto.LocalMsgHup
+				msg.From = s.config.NodeID
+				msg.ForceVote = true
+				s.raftFsm.Step(msg)
+				s.maybeChange(true)
+		    }
 		case c := <-s.statusc:
 			c <- s.getStatus()
 
