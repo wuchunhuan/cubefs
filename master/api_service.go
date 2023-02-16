@@ -1318,8 +1318,10 @@ func (m *Server) diagnoseDataPartition(w http.ResponseWriter, r *http.Request) {
 		inactiveNodes     []string
 		corruptDps        []*DataPartition
 		lackReplicaDps    []*DataPartition
+		badReplicaDps     []*DataPartition
 		corruptDpIDs      []uint64
 		lackReplicaDpIDs  []uint64
+		badReplicaDpIDs   []uint64
 		badDataPartitions []badPartitionView
 	)
 
@@ -1329,12 +1331,13 @@ func (m *Server) diagnoseDataPartition(w http.ResponseWriter, r *http.Request) {
 	}()
 	corruptDpIDs = make([]uint64, 0)
 	lackReplicaDpIDs = make([]uint64, 0)
+	badReplicaDpIDs = make([]uint64, 0)
 	if inactiveNodes, corruptDps, err = m.cluster.checkCorruptDataPartitions(); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
 
-	if lackReplicaDps, err = m.cluster.checkLackReplicaDataPartitions(); err != nil {
+	if lackReplicaDps, badReplicaDps, err = m.cluster.checkReplicaOfDataPartitions(); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
@@ -1344,14 +1347,20 @@ func (m *Server) diagnoseDataPartition(w http.ResponseWriter, r *http.Request) {
 	for _, dp := range lackReplicaDps {
 		lackReplicaDpIDs = append(lackReplicaDpIDs, dp.PartitionID)
 	}
+	for _, dp := range badReplicaDps {
+		badReplicaDpIDs = append(badReplicaDpIDs, dp.PartitionID)
+	}
+
 	badDataPartitions = m.cluster.getBadDataPartitionsView()
 	rstMsg = &proto.DataPartitionDiagnosis{
 		InactiveDataNodes:           inactiveNodes,
 		CorruptDataPartitionIDs:     corruptDpIDs,
 		LackReplicaDataPartitionIDs: lackReplicaDpIDs,
 		BadDataPartitionIDs:         badDataPartitions,
+		BadReplicaDataPartitionIDs:  badReplicaDpIDs,
 	}
-	log.LogInfof("diagnose dataPartition[%v] inactiveNodes:[%v], corruptDpIDs:[%v], lackReplicaDpIDs:[%v]", m.cluster.Name, inactiveNodes, corruptDpIDs, lackReplicaDpIDs)
+	log.LogInfof("diagnose dataPartition[%v] inactiveNodes:[%v], corruptDpIDs:[%v], lackReplicaDpIDs:[%v], BadReplicaDataPartitionIDs[%v]",
+		m.cluster.Name, inactiveNodes, corruptDpIDs, lackReplicaDpIDs, badReplicaDpIDs)
 	sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
 }
 
