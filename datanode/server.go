@@ -371,6 +371,7 @@ type DataNodeInfo struct {
 }
 
 func (s *DataNode) checkLocalPartitionMatchWithMaster() (err error) {
+	return
 	var convert = func(node *proto.DataNodeInfo) *DataNodeInfo {
 		result := &DataNodeInfo{}
 		result.Addr = node.Addr
