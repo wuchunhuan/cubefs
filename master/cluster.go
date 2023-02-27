@@ -1823,6 +1823,21 @@ func (c *Cluster) decommissionDataPartition(offlineAddr string, dp *DataPartitio
 	return c.migrateDataPartition(offlineAddr, "", dp, raftForce, errMsg)
 }
 
+func (c *Cluster) validateRaftForceDel(dp *DataPartition, offlineAddr string) (err error) {
+	dp.RLock()
+	defer dp.RUnlock()
+
+	liveReplicas := dp.liveReplicas(defaultDataPartitionTimeOutSec)
+	if len(liveReplicas) == 1 {
+		if liveReplicas[0].Addr == offlineAddr {
+			err = fmt.Errorf("dp %v left one live replica %v, cann't be delete", dp.PartitionID, offlineAddr)
+			log.LogWarnf("validateRaftForceDel.%v", err)
+			return
+		}
+	}
+	return
+}
+
 func (c *Cluster) validateDecommissionDataPartition(dp *DataPartition, offlineAddr string) (err error) {
 	dp.RLock()
 	defer dp.RUnlock()
@@ -2046,6 +2061,11 @@ func (c *Cluster) removeDataReplica(dp *DataPartition, addr string, validate boo
 	// validate be set true only in api call
 	if validate && !raftForceDel {
 		if err = c.validateDecommissionDataPartition(dp, addr); err != nil {
+			return
+		}
+	}
+	if raftForceDel {
+		if err = c.validateRaftForceDel(dp, addr); err != nil {
 			return
 		}
 	}
