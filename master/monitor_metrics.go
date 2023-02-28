@@ -45,6 +45,7 @@ const (
 	MetricInactiveDataNodeInfo = "inactive_dataNodes_info"
 	MetricMetaNodesInactive    = "metaNodes_inactive"
 	MetricInactiveMataNodeInfo = "inactive_mataNodes_info"
+	MetricMetaInconsistent     = "mp_inconsistent"
 
 	MetricMissingDp  = "missing_dp"
 	MetricDpNoLeader = "dp_no_leader"
@@ -74,16 +75,19 @@ type monitorMetrics struct {
 	InactiveDataNodeInfo *exporter.GaugeVec
 	metaNodesInactive    *exporter.Gauge
 	InactiveMataNodeInfo *exporter.GaugeVec
+	metaEqualCheckFail   *exporter.GaugeVec
 
-	volNames map[string]struct{}
-	badDisks map[string]string
+	volNames        map[string]struct{}
+	badDisks        map[string]string
+	inconsistentMps map[string]string
 	//volNamesMutex sync.Mutex
 }
 
 func newMonitorMetrics(c *Cluster) *monitorMetrics {
 	return &monitorMetrics{cluster: c,
-		volNames: make(map[string]struct{}),
-		badDisks: make(map[string]string),
+		volNames:        make(map[string]struct{}),
+		badDisks:        make(map[string]string),
+		inconsistentMps: make(map[string]string),
 	}
 }
 
@@ -113,14 +117,14 @@ func newWarningMetrics(c *Cluster) *warningMetrics {
 
 func (m *warningMetrics) reset() {
 	m.dpMutex.Lock()
-	for dp, _ := range m.dpNoLeaderInfo {
+	for dp := range m.dpNoLeaderInfo {
 		m.dpNoLeader.DeleteLabelValues(m.cluster.Name, strconv.FormatUint(dp, 10))
 		delete(m.dpNoLeaderInfo, dp)
 	}
 	m.dpMutex.Unlock()
 
 	m.mpMutex.Lock()
-	for mp, _ := range m.mpNoLeaderInfo {
+	for mp := range m.mpNoLeaderInfo {
 		m.mpNoLeader.DeleteLabelValues(m.cluster.Name, strconv.FormatUint(mp, 10))
 		delete(m.mpNoLeaderInfo, mp)
 	}
@@ -228,6 +232,7 @@ func (mm *monitorMetrics) start() {
 	mm.InactiveDataNodeInfo = exporter.NewGaugeVec(MetricInactiveDataNodeInfo, "", []string{"clusterName", "addr"})
 	mm.metaNodesInactive = exporter.NewGauge(MetricMetaNodesInactive)
 	mm.InactiveMataNodeInfo = exporter.NewGaugeVec(MetricInactiveMataNodeInfo, "", []string{"clusterName", "addr"})
+	mm.metaEqualCheckFail = exporter.NewGaugeVec(MetricMetaInconsistent, "", []string{"volume", "mpId"})
 	go mm.statMetrics()
 }
 
@@ -270,6 +275,7 @@ func (mm *monitorMetrics) doStat() {
 	mm.setDiskErrorMetric()
 	mm.setInactiveDataNodesCount()
 	mm.setInactiveMetaNodesCount()
+	mm.setMpInconsistentErrorMetric()
 }
 
 func (mm *monitorMetrics) setVolMetrics() {
@@ -334,6 +340,32 @@ func (mm *monitorMetrics) deleteVolMetric(volName string) {
 	mm.volMetaCount.DeleteLabelValues(volName, "dentry")
 	mm.volMetaCount.DeleteLabelValues(volName, "mp")
 	mm.volMetaCount.DeleteLabelValues(volName, "dp")
+}
+func (mm *monitorMetrics) setMpInconsistentErrorMetric() {
+	deleteMps := make(map[string]string)
+	for k, v := range mm.inconsistentMps {
+		deleteMps[k] = v
+		delete(mm.inconsistentMps, k)
+	}
+	mm.cluster.volMutex.RLock()
+	defer mm.cluster.volMutex.RUnlock()
+
+	for _, vol := range mm.cluster.vols {
+		for _, mp := range vol.MetaPartitions {
+			if mp.IsRecover || mp.EqualCheckPass {
+				continue
+			}
+			idStr := strconv.FormatUint(mp.PartitionID, 10)
+			mm.metaEqualCheckFail.SetWithLabelValues(1, vol.Name, idStr)
+			mm.inconsistentMps[idStr] = vol.Name
+			log.LogWarnf("setMpInconsistentErrorMetric.mp %v SetWithLabelValues id %v vol %v", mp.PartitionID, idStr, vol.Name)
+			delete(deleteMps, idStr)
+		}
+	}
+
+	for k, v := range deleteMps {
+		mm.metaEqualCheckFail.DeleteLabelValues(v, k)
+	}
 }
 
 func (mm *monitorMetrics) setDiskErrorMetric() {
@@ -402,6 +434,12 @@ func (mm *monitorMetrics) setInactiveDataNodesCount() {
 	mm.dataNodesInactive.Set(float64(inactiveDataNodesCount))
 }
 
+func (mm *monitorMetrics) clearInconsistentMps() {
+	for k := range mm.inconsistentMps {
+		mm.metaEqualCheckFail.DeleteLabelValues(k)
+	}
+}
+
 func (mm *monitorMetrics) clearVolMetrics() {
 	mm.cluster.volStatInfo.Range(func(key, value interface{}) bool {
 		if volName, ok := key.(string); ok {
@@ -433,4 +471,5 @@ func (mm *monitorMetrics) resetAllMetrics() {
 	//mm.diskError.Set(0)
 	mm.dataNodesInactive.Set(0)
 	mm.metaNodesInactive.Set(0)
+	mm.clearInconsistentMps()
 }
