@@ -17,6 +17,7 @@ package master
 import (
 	"encoding/json"
 	"fmt"
+	masterSDK "github.com/cubefs/cubefs/sdk/master"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -68,6 +69,7 @@ type Cluster struct {
 	diskQosEnable       bool
 	QosAcceptLimit      *rate.Limiter
 	apiLimiter          *ApiLimiter
+	masterClient        *masterSDK.MasterClient
 }
 
 type followerReadManager struct {
@@ -75,14 +77,16 @@ type followerReadManager struct {
 	status                map[string]bool
 	lastUpdateTick        map[string]time.Time
 	needCheck             bool
+	c                     *Cluster
 	rwMutex               sync.RWMutex
 }
 
-func newFollowerReadManager() (mgr *followerReadManager) {
+func newFollowerReadManager(c *Cluster) (mgr *followerReadManager) {
 	mgr = new(followerReadManager)
 	mgr.volDataPartitionsView = make(map[string][]byte)
 	mgr.status = make(map[string]bool)
 	mgr.lastUpdateTick = make(map[string]time.Time)
+	mgr.c = c
 	return
 }
 
@@ -94,56 +98,56 @@ func (mgr *followerReadManager) reSet() {
 	mgr.status = make(map[string]bool)
 }
 
+func (mgr *followerReadManager) getVolumeDpView() {
+	if err := mgr.c.loadVols(); err != nil {
+		panic(err)
+	}
+	for _, vol := range mgr.c.vols {
+		log.LogDebugf("followerReadManager.getVolumeDpView %v", vol.Name)
+		if view, err := mgr.c.masterClient.ClientAPI().GetDataPartitions(vol.Name); err == nil {
+			mgr.updateVolViewFromLeader(vol.Name, view)
+		}
+	}
+}
+
 func (mgr *followerReadManager) checkStatus() {
 	mgr.rwMutex.Lock()
 	defer mgr.rwMutex.Unlock()
 
 	timeNow := time.Now()
 	for volNm, lastTime := range mgr.lastUpdateTick {
-		if lastTime.Before(timeNow.Add(-time.Second * 10)) {
+		if lastTime.Before(timeNow.Add(-time.Second * 30)) {
 			mgr.status[volNm] = false
 			log.LogInfof("action[checkStatus] volume %v expired last time %v, now %v", volNm, lastTime, timeNow)
 		}
 	}
 }
 
-func (mgr *followerReadManager) updateVolViewFromLeader(key string, value []byte) {
-	mgr.rwMutex.Lock()
-	defer mgr.rwMutex.Unlock()
-
-	if !mgr.checkViewContent(key, value, true) {
+func (mgr *followerReadManager) updateVolViewFromLeader(key string, view *proto.DataPartitionsView) {
+	log.LogDebugf("followerReadManager.updateVolViewFromLeader key %v", key)
+	if !mgr.checkViewContent(key, view, true) {
 		log.LogErrorf("updateVolViewFromLeader. checkViewContent failed")
 		return
 	}
-	log.LogInfof("action[updateVolViewFromLeader] volume %v be updated, value len %v", key, len(value))
-	mgr.volDataPartitionsView[key] = value
+	log.LogDebugf("action[updateVolViewFromLeader] volume %v be updated, value len %v", key, len(view.DataPartitions))
+
+	reply := newSuccessHTTPReply(view)
+	if body, err := json.Marshal(reply); err != nil {
+		log.LogErrorf("action[updateDpResponseCache] marshal error %v", err)
+		return
+	} else {
+		mgr.volDataPartitionsView[key] = body
+	}
+
 	mgr.status[key] = true
 	mgr.lastUpdateTick[key] = time.Now()
 }
 
-func (mgr *followerReadManager) checkViewContent(volName string, data []byte, isUpdate bool) (ok bool) {
+func (mgr *followerReadManager) checkViewContent(volName string, view *proto.DataPartitionsView, isUpdate bool) (ok bool) {
 	if !isUpdate && !mgr.needCheck {
 		return true
 	}
-
-	reply := &struct {
-		Code int32           `json:"code"`
-		Msg  string          `json:"msg"`
-		Data json.RawMessage `json:"data"`
-	}{}
-
-	view := &proto.DataPartitionsView{}
-
 	log.LogDebugf("volName %v do check content", volName)
-
-	if err := json.Unmarshal(data, reply); err != nil {
-		log.LogErrorf("checkViewContent. umarshal error volName %V", volName)
-		return false
-	}
-	if err := json.Unmarshal(reply.Data, view); err != nil {
-		log.LogErrorf("checkViewContent. umarshal reply.Data error volName %V", volName)
-		return false
-	}
 
 	if len(view.DataPartitions) == 0 {
 		log.LogErrorf("checkViewContent. get nil partitions volName %V", volName)
@@ -163,15 +167,14 @@ func (mgr *followerReadManager) checkViewContent(volName string, data []byte, is
 func (mgr *followerReadManager) getVolViewAsFollower(key string) (value []byte, ok bool) {
 	mgr.rwMutex.RLock()
 	defer mgr.rwMutex.RUnlock()
+	ok = true
 	if !mgr.status[key] {
+		log.LogDebugf("followerReadManager. getVolViewAsFollower key %v", key)
+		ok = false
 		return
 	}
 	value, _ = mgr.volDataPartitionsView[key]
-	ok = mgr.checkViewContent(key, value, false)
-	if !ok {
-		log.LogWarnf("getVolViewAsFollower. set volume %v not worked!", key)
-		mgr.status[key] = false
-	}
+	log.LogDebugf("getVolViewAsFollower. volume %v return!", key)
 	return
 }
 
@@ -194,13 +197,14 @@ func newCluster(name string, leaderInfo *LeaderInfo, fsm *MetadataFsm, partition
 	c.metaNodeStatInfo = new(nodeStatInfo)
 	c.FaultDomain = cfg.faultDomain
 	c.zoneStatInfos = make(map[string]*proto.ZoneStat)
-	c.followerReadManager = newFollowerReadManager()
+	c.followerReadManager = newFollowerReadManager(c)
 	c.fsm = fsm
 	c.partition = partition
 	c.idAlloc = newIDAllocator(c.fsm.store, c.partition)
 	c.domainManager = newDomainManager(c)
 	c.QosAcceptLimit = rate.NewLimiter(rate.Limit(c.cfg.QosMasterAcceptLimit), proto.QosDefaultBurst)
 	c.apiLimiter = newApiLimiter()
+	c.masterClient = masterSDK.NewMasterClient(nil, false)
 	return
 }
 
@@ -335,12 +339,8 @@ func (c *Cluster) scheduleToCheckVolStatus() {
 func (c *Cluster) scheduleToCheckFollowerReadCache() {
 	go func() {
 		for {
-			if c.partition.IsRaftLeader() {
-				vols := c.allVols()
-				for _, vol := range vols {
-					vol.sendViewCacheToFollower(c)
-				}
-			} else {
+			if !c.partition.IsRaftLeader() {
+				c.followerReadManager.getVolumeDpView()
 				c.followerReadManager.checkStatus()
 			}
 			time.Sleep(5 * time.Second)
