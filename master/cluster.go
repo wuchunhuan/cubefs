@@ -168,11 +168,6 @@ func (mgr *followerReadManager) getVolViewAsFollower(key string) (value []byte, 
 	mgr.rwMutex.RLock()
 	defer mgr.rwMutex.RUnlock()
 	ok = true
-	if !mgr.status[key] {
-		log.LogDebugf("followerReadManager. getVolViewAsFollower key %v", key)
-		ok = false
-		return
-	}
 	value, _ = mgr.volDataPartitionsView[key]
 	log.LogDebugf("getVolViewAsFollower. volume %v return!", key)
 	return
