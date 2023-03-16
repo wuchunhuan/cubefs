@@ -104,6 +104,10 @@ func (mgr *followerReadManager) getVolumeDpView() {
 	}
 	for _, vol := range mgr.c.vols {
 		log.LogDebugf("followerReadManager.getVolumeDpView %v", vol.Name)
+		if mgr.c.masterClient.Leader() == "" {
+			log.LogDebugf("followerReadManager.getVolumeDpView %v but leader not ready", vol.Name)
+			return
+		}
 		if view, err := mgr.c.masterClient.ClientAPI().GetDataPartitions(vol.Name); err == nil {
 			mgr.updateVolViewFromLeader(vol.Name, view)
 		}
