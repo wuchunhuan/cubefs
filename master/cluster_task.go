@@ -17,6 +17,7 @@ package master
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/cubefs/cubefs/depends/tiglabs/raft/logger"
 	"runtime"
 	"sync"
 	"time"
@@ -796,7 +797,9 @@ func (c *Cluster) handleDataNodeTaskResponse(nodeAddr string, task *proto.AdminT
 		log.LogInfof("action[handleDataNodeTaskResponse] receive addr[%v] task response,but task is nil", nodeAddr)
 		return
 	}
-	log.LogDebugf("action[handleDataNodeTaskResponse] receive addr[%v] task response:%v", nodeAddr, task.ToString())
+	if logger.IsEnableDebug() {
+		log.LogDebugf("action[handleDataNodeTaskResponse] receive addr[%v] task response:%v", nodeAddr, task.ToString())
+	}
 	var (
 		err      error
 		dataNode *DataNode
