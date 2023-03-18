@@ -144,6 +144,8 @@ func (mgr *followerReadManager) updateVolViewFromLeader(key string, view *proto.
 		log.LogErrorf("action[updateDpResponseCache] marshal error %v", err)
 		return
 	} else {
+		mgr.rwMutex.Lock()
+		defer mgr.rwMutex.Unlock()
 		mgr.volDataPartitionsView[key] = body
 	}
 
