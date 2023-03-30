@@ -40,8 +40,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cubefs/cubefs/blockcache/bcache"
-
 	"github.com/cubefs/cubefs/util/buf"
 
 	"github.com/cubefs/cubefs/sdk/master"
