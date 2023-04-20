@@ -146,6 +146,7 @@ func (mgr *followerReadManager) sendFollowerVolumeDpView() {
 				log.LogErrorf("followerReadManager.sendFollowerVolumeDpView PutDataPartitions name %v addr %v err %v", name, addr, err)
 				continue
 			}
+			mgr.c.masterClient.SetLeader("")
 			log.LogDebugf("followerReadManager.sendFollowerVolumeDpView PutDataPartitions name %v addr %v err %v", name, addr, err)
 		}
 	}
