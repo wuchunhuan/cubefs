@@ -104,7 +104,8 @@ func (l *ApiLimiter) Wait(qPath string) (err error) {
 		return nil
 	}
 	l.m.RUnlock()
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*time.Duration(lInfo.LimiterTimeout))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(lInfo.LimiterTimeout))
+	defer cancel()
 	err = lInfo.Limiter.Wait(ctx)
 	if err != nil {
 		log.LogErrorf("wait api limiter for api[%v] failed: %v", qPath, err)

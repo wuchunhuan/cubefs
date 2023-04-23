@@ -3410,12 +3410,12 @@ func (m *Server) putDataPartitions(w http.ResponseWriter, r *http.Request) {
 		}{}
 
 		if err = json.Unmarshal(body, reply); err != nil {
-			log.LogErrorf("putDataPartitions. umarshal error volName %V", name)
+			log.LogErrorf("putDataPartitions. umarshal error volName %v", name)
 			return
 		}
 		view := &proto.DataPartitionsView{}
 		if err = json.Unmarshal(reply.Data, view); err != nil {
-			log.LogErrorf("putDataPartitions. umarshal reply.Data error volName %V", name)
+			log.LogErrorf("putDataPartitions. umarshal reply.Data error volName %v", name)
 			return
 		}
 

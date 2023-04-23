@@ -194,7 +194,7 @@ func (mgr *followerReadManager) checkViewContent(volName string, view *proto.Dat
 	log.LogDebugf("volName %v do check content", volName)
 
 	if len(view.DataPartitions) == 0 {
-		log.LogErrorf("checkViewContent. get nil partitions volName %V", volName)
+		log.LogErrorf("checkViewContent. get nil partitions volName %v", volName)
 		return false
 	}
 	for i := 0; i < len(view.DataPartitions); i++ {
