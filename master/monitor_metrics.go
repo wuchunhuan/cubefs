@@ -46,6 +46,9 @@ const (
 	MetricMetaNodesInactive    = "metaNodes_inactive"
 	MetricInactiveMataNodeInfo = "inactive_mataNodes_info"
 	MetricMetaInconsistent     = "mp_inconsistent"
+	MetricMasterNoLeader       = "master_no_leader"
+	MetricMasterNoCache        = "master_no_cache"
+	MetricMasterSnapshot       = "master_snapshot"
 
 	MetricMissingDp  = "missing_dp"
 	MetricDpNoLeader = "dp_no_leader"
@@ -76,11 +79,13 @@ type monitorMetrics struct {
 	metaNodesInactive    *exporter.Gauge
 	InactiveMataNodeInfo *exporter.GaugeVec
 	metaEqualCheckFail   *exporter.GaugeVec
+	masterNoLeader       *exporter.Gauge
+	masterNoCache        *exporter.GaugeVec
+	masterSnapshot       *exporter.Gauge
 
 	volNames        map[string]struct{}
 	badDisks        map[string]string
 	inconsistentMps map[string]string
-	//volNamesMutex sync.Mutex
 }
 
 func newMonitorMetrics(c *Cluster) *monitorMetrics {
@@ -233,6 +238,10 @@ func (mm *monitorMetrics) start() {
 	mm.metaNodesInactive = exporter.NewGauge(MetricMetaNodesInactive)
 	mm.InactiveMataNodeInfo = exporter.NewGaugeVec(MetricInactiveMataNodeInfo, "", []string{"clusterName", "addr"})
 	mm.metaEqualCheckFail = exporter.NewGaugeVec(MetricMetaInconsistent, "", []string{"volume", "mpId"})
+
+	mm.masterSnapshot = exporter.NewGauge(MetricMasterSnapshot)
+	mm.masterNoLeader = exporter.NewGauge(MetricMasterNoLeader)
+	mm.masterNoCache = exporter.NewGaugeVec(MetricMasterNoCache, "", []string{"volName"})
 	go mm.statMetrics()
 }
 
@@ -241,7 +250,7 @@ func (mm *monitorMetrics) statMetrics() {
 	defer func() {
 		if err := recover(); err != nil {
 			ticker.Stop()
-			log.LogErrorf("statMetrics panic,err[%v]", err)
+			log.LogErrorf("statMetrics panic,msg:%v", err)
 		}
 	}()
 
@@ -250,12 +259,28 @@ func (mm *monitorMetrics) statMetrics() {
 		case <-ticker.C:
 			partition := mm.cluster.partition
 			if partition != nil && partition.IsRaftLeader() {
+				mm.resetFollowerMetrics()
 				mm.doStat()
 			} else {
-				mm.resetAllMetrics()
+				mm.resetAllLeaderMetrics()
+				mm.doFollowerStat()
 			}
 		}
 	}
+}
+
+func (mm *monitorMetrics) doFollowerStat() {
+	if mm.cluster.leaderInfo.addr == "" {
+		mm.masterNoLeader.Set(1)
+	} else {
+		mm.masterNoLeader.Set(0)
+	}
+	if mm.cluster.fsm.onSnapshot {
+		mm.masterSnapshot.Set(1)
+	} else {
+		mm.masterSnapshot.Set(0)
+	}
+	mm.setVolNoCacheMetrics()
 }
 
 func (mm *monitorMetrics) doStat() {
@@ -276,6 +301,26 @@ func (mm *monitorMetrics) doStat() {
 	mm.setInactiveDataNodesCount()
 	mm.setInactiveMetaNodesCount()
 	mm.setMpInconsistentErrorMetric()
+}
+
+func (mm *monitorMetrics) setVolNoCacheMetrics() {
+	deleteVolNames := make(map[string]struct{})
+	mm.cluster.followerReadManager.rwMutex.RLock()
+	defer mm.cluster.followerReadManager.rwMutex.RUnlock()
+
+	for volName, stat := range mm.cluster.followerReadManager.status {
+		if stat == true {
+			deleteVolNames[volName] = struct{}{}
+			log.LogDebugf("setVolNoCacheMetrics deleteVolNames volName %v", volName)
+			continue
+		}
+		log.LogWarnf("setVolNoCacheMetrics volName %v", volName)
+		mm.masterNoCache.SetWithLabelValues(1, volName)
+	}
+
+	for volName := range deleteVolNames {
+		mm.masterNoCache.DeleteLabelValues(volName)
+	}
 }
 
 func (mm *monitorMetrics) setVolMetrics() {
@@ -454,8 +499,13 @@ func (mm *monitorMetrics) clearDiskErrMetrics() {
 		mm.diskError.DeleteLabelValues(v, k)
 	}
 }
+func (mm *monitorMetrics) resetFollowerMetrics() {
+	mm.masterNoCache.GaugeVec.Reset()
+	mm.masterNoLeader.Set(0)
+	mm.masterSnapshot.Set(0)
+}
 
-func (mm *monitorMetrics) resetAllMetrics() {
+func (mm *monitorMetrics) resetAllLeaderMetrics() {
 	mm.clearVolMetrics()
 	mm.clearDiskErrMetrics()
 
