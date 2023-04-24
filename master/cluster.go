@@ -105,7 +105,8 @@ func (mgr *followerReadManager) getVolumeDpView() {
 		view     *proto.DataPartitionsView
 	)
 	if err, volNames = mgr.c.loadVolsName(); err != nil {
-		panic(err)
+		log.LogErrorf("followerReadManager.loadVolsName err %v", err)
+		return
 	}
 	if mgr.c.masterClient.Leader() == "" {
 		log.LogErrorf("followerReadManager.getVolumeDpView but master leader not ready")
@@ -128,6 +129,9 @@ func (mgr *followerReadManager) sendFollowerVolumeDpView() {
 	vols := mgr.c.copyVols()
 	for _, vol := range vols {
 		log.LogDebugf("followerReadManager.getVolumeDpView %v", vol.Name)
+		if !proto.IsHot(vol.VolType) && vol.CacheAction == proto.NoCache {
+			continue
+		}
 		var body []byte
 		if body, err = vol.getDataPartitionsView(); err != nil {
 			log.LogErrorf("followerReadManager.sendFollowerVolumeDpView err %v", err)
