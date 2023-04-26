@@ -191,7 +191,6 @@ func (mf *MetadataFsm) ApplySnapshot(peers []proto.Peer, iterator proto.SnapIter
 
 	for it.SeekToFirst(); it.Valid(); it.Next() {
 		key := string(it.Key().Data())
-		log.LogInfof("deleting Key: %v Value: %v", key, it.Value().Data())
 		mf.store.Del(key, false)
 	}
 
