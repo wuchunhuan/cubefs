@@ -843,9 +843,11 @@ func (c *Cluster) checkCorruptDataPartitions() (inactiveDataNodes []string, corr
 				continue
 			}
 			if partition.getLeaderAddr() == "" {
-				partitionMap[id] = partitionMap[id] + 1
-				if partitionMap[id] == 1 {
-					corruptPartitions = append(corruptPartitions, partition)
+				if time.Now().Unix() - partition.LeaderReportTime > defaultNoLeaderReportInterval {
+					partitionMap[id] = partitionMap[id] + 1
+					if partitionMap[id] == 1 {
+						corruptPartitions = append(corruptPartitions, partition)
+					}
 				}
 			}
 		}
