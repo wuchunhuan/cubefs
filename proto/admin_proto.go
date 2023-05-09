@@ -59,6 +59,8 @@ const (
 	AdminDataPartitionChangeLeader  = "/dataPartition/changeleader"
 	AdminChangeMasterLeader         = "/master/changeleader"
 	AdminOpFollowerPartitionsRead   = "/master/opFollowerPartitionRead"
+	AdminSetDpDiscard               = "/admin/setDpDiscard"
+
 	//graphql master api
 	AdminClusterAPI = "/api/cluster"
 	AdminUserAPI    = "/api/user"
@@ -185,6 +187,7 @@ var GApiInfo map[string]string = map[string]string{
 	"adminsetnoderdonly":              AdminSetNodeRdOnly,
 	"adminsetdprdonly":                AdminSetDpRdOnly,
 	"admindatapartitionchangeleader":  AdminDataPartitionChangeLeader,
+	"adminsetdpdiscard":               AdminSetDpDiscard,
 	//"adminclusterapi":                 AdminClusterAPI,
 	//"adminuserapi":                    AdminUserAPI,
 	//"adminvolumeapi":                  AdminVolumeAPI,
@@ -553,6 +556,7 @@ type DataPartitionResponse struct {
 	Epoch         uint64
 	IsRecover     bool
 	PartitionTTL  int64
+	IsDiscard     bool
 }
 
 // DataPartitionsView defines the view of a data partition

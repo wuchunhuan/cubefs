@@ -305,7 +305,7 @@ func (w *Wrapper) getDataPartition(isInit bool, dpId uint64) (err error) {
 		return
 	}
 
-	log.LogInfof("getDataPartition: get data partitions: volume(%v)", w.volName)
+	log.LogInfof("getDataPartition: get data partitions: volume(%v), dpId(%v)", w.volName, dpId)
 	var leaderAddr string
 	for _, replica := range dpInfo.Replicas {
 		if replica.IsLeader {
@@ -321,6 +321,7 @@ func (w *Wrapper) getDataPartition(isInit bool, dpId uint64) (err error) {
 	copy(dpr.Hosts, dpInfo.Hosts)
 	dpr.LeaderAddr = leaderAddr
 	dpr.IsRecover = dpInfo.IsRecover
+	dpr.IsDiscard = dpInfo.IsDiscard
 
 	DataPartitions := make([]*proto.DataPartitionResponse, 1)
 	DataPartitions = append(DataPartitions, dpr)
@@ -369,12 +370,15 @@ func (w *Wrapper) replaceOrInsertPartition(dp *DataPartition) {
 	w.Lock()
 	old, ok := w.partitions[dp.PartitionID]
 	if ok {
-		oldstatus = old.Status
-		old.Status = dp.Status
+		oldstatus      = old.Status
+
+		old.Status     = dp.Status
 		old.ReplicaNum = dp.ReplicaNum
-		old.Hosts = dp.Hosts
-		old.NearHosts = dp.Hosts
-		dp.Metrics = old.Metrics
+		old.Hosts      = dp.Hosts
+		old.IsDiscard  = dp.IsDiscard
+		old.NearHosts  = dp.Hosts
+
+		dp.Metrics     = old.Metrics
 	} else {
 		dp.Metrics = NewDataPartitionMetrics()
 		w.partitions[dp.PartitionID] = dp

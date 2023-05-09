@@ -90,6 +90,7 @@ const (
 	QosMasterLimit          = "qosLimit"
 	Limit                   = "limit"
 	TimeOut                 = "timeout"
+	dpDiscardKey            = "dpDiscard"
 )
 
 const (

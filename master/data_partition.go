@@ -31,18 +31,18 @@ import (
 
 // DataPartition represents the structure of storing the file contents.
 type DataPartition struct {
-	PartitionID    uint64
-	PartitionType  int
-	PartitionTTL   int64
-	LastLoadedTime int64
-	ReplicaNum     uint8
-	Status         int8
-	isRecover      bool
-	Replicas       []*DataReplica
+	PartitionID      uint64
+	PartitionType    int
+	PartitionTTL     int64
+	LastLoadedTime   int64
+	ReplicaNum       uint8
+	Status           int8
+	isRecover        bool
+	Replicas         []*DataReplica
 	LeaderReportTime int64
-	Hosts          []string // host addresses
-	Peers          []proto.Peer
-	offlineMutex   sync.RWMutex
+	Hosts            []string // host addresses
+	Peers            []proto.Peer
+	offlineMutex     sync.RWMutex
 	sync.RWMutex
 	total                    uint64
 	used                     uint64
@@ -60,6 +60,7 @@ type DataPartition struct {
 	SingleDecommissionAddr   string
 	RdOnly                   bool
 	addReplicaMutex          sync.RWMutex
+	IsDiscard                bool
 }
 
 type DataPartitionPreLoad struct {
@@ -413,6 +414,7 @@ func (partition *DataPartition) convertToDataPartitionResponse() (dpr *proto.Dat
 	copy(dpr.Hosts, partition.Hosts)
 	dpr.LeaderAddr = partition.getLeaderAddr()
 	dpr.IsRecover = partition.isRecover
+	dpr.IsDiscard = partition.IsDiscard
 
 	return
 }
@@ -895,5 +897,6 @@ func (partition *DataPartition) buildDpInfo(c *Cluster) *proto.DataPartitionInfo
 		FilesWithMissingReplica:  partition.FilesWithMissingReplica,
 		SingleDecommissionStatus: partition.SingleDecommissionStatus,
 		SingleDecommissionAddr:   partition.SingleDecommissionAddr,
+		IsDiscard:                partition.IsDiscard,
 	}
 }
